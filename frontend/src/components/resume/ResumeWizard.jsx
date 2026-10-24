@@ -3,14 +3,17 @@ import { ArrowLeft, ArrowRight, Sparkles, X } from 'lucide-react';
 import { useEffect, useId, useState } from 'react';
 import { fetchLearnCatalog, generateResume } from '../../lib/api';
 import { useAuth } from '../../lib/authContext';
-import { emptyWizardItem, snapshot } from '../../lib/resume';
+import { emptyWizardActivity, emptyWizardItem, snapshot } from '../../lib/resume';
 import { KEYS, readStorage, writeStorage } from '../../lib/storage';
+import { formatSkill } from '../../utils/format';
 import { LineList, TagInput, TextField } from '../results/edit/fields';
 import Button from '../ui/Button';
+import ProjectIdeas from './ProjectIdeas';
+import WizardActivities from './WizardActivities';
 import WizardItems from './WizardItems';
 import WizardResult from './WizardResult';
 
-const STEPS = ['About you', 'Your goal', 'Education', 'Projects & internships', 'Skills & extras'];
+const STEPS = ['About you', 'Your goal', 'Education', 'Projects & internships', 'Activities', 'Skills & extras'];
 
 const EMPTY = {
   name: '',
@@ -23,6 +26,7 @@ const EMPTY = {
   job_description: '',
   education: { degree: 'B.Tech', branch: '', school: '', start: '', end: '', grade: '' },
   items: [],
+  activities: [],
   skills: [],
   certifications: [],
   achievements: [],
@@ -30,12 +34,13 @@ const EMPTY = {
 
 /** The answers in the shape the /api/resume/generate endpoint expects. */
 function toRequest(answers, variant) {
-  const { github, linkedin, education, items, ...rest } = answers;
+  const { github, linkedin, education, items, activities, ...rest } = answers;
   return {
     ...rest,
     links: [github, linkedin].map((l) => l.trim()).filter(Boolean),
     education: [education],
     items: JSON.parse(snapshot(items)),
+    activities: JSON.parse(snapshot(activities)),
     variant,
   };
 }
@@ -91,6 +96,7 @@ export default function ResumeWizard({ onCancel, onUse, notify }) {
     const saved = readStorage(KEYS.wizard);
     const base = { ...EMPTY, ...saved, education: { ...EMPTY.education, ...saved?.education } };
     base.items = base.items?.length ? base.items.map((i) => ({ ...emptyWizardItem(i.kind), ...i })) : [emptyWizardItem()];
+    base.activities = (base.activities || []).map((a) => ({ ...emptyWizardActivity(), ...a }));
     if (!base.name && user) base.name = user.user_metadata?.full_name || user.user_metadata?.name || '';
     if (!base.email && user) base.email = user.email || '';
     return base;
@@ -108,7 +114,26 @@ export default function ResumeWizard({ onCancel, onUse, notify }) {
 
   const set = (key) => (value) => setAnswers((a) => ({ ...a, [key]: value }));
   const setEdu = (key) => (value) => setAnswers((a) => ({ ...a, education: { ...a.education, [key]: value } }));
-  const ready = answers.name.trim() && answers.items.some((i) => i.title.trim() || i.what.trim());
+  // A first-year with no projects can still generate from education, skills and activities
+  const ready =
+    answers.name.trim() &&
+    (answers.items.some((i) => i.title.trim() || i.what.trim()) ||
+      answers.activities.some((a) => a.what.trim() || a.role.trim()) ||
+      answers.skills.length > 0);
+  const knownSkills = [...answers.items.flatMap((i) => i.tech), ...answers.skills];
+
+  const addIdea = (idea, skills) =>
+    setAnswers((a) => {
+      const item = {
+        ...emptyWizardItem('project'),
+        title: idea.title,
+        tech: skills.map(formatSkill),
+        what: idea.summary.replace(/\.$/, '').replace(/^./, (c) => c.toLowerCase()),
+      };
+      // Replace the blank starter card instead of adding next to it
+      const kept = a.items.filter((i) => i.title.trim() || i.what.trim() || i.tech.length);
+      return { ...a, items: [...kept, item] };
+    });
 
   const generate = async (nextVariant = variant, nextAnswers = answers) => {
     setBusy(true);
@@ -184,6 +209,26 @@ export default function ResumeWizard({ onCancel, onUse, notify }) {
       hint="Quick facts are enough: we turn them into strong bullet points. A number in the result makes the biggest difference."
     >
       <WizardItems items={answers.items} onChange={set('items')} />
+      <ProjectIdeas
+        role={answers.target_role}
+        skills={knownSkills}
+        jobDescription={answers.job_description}
+        onAdd={addIdea}
+        notify={notify}
+      />
+    </Step>,
+    <Step
+      key="activities"
+      title="Activities"
+      hint="Clubs, events you organised, hackathons, NSS/NCC, sports or volunteering. Recruiters read these as leadership and initiative."
+    >
+      <div className="space-y-5">
+        <WizardActivities activities={answers.activities} onChange={set('activities')} />
+        <div>
+          <p className="label">Achievements</p>
+          <LineList items={answers.achievements} onChange={set('achievements')} placeholder="Top 5% in a national coding contest" addLabel="Add achievement" />
+        </div>
+      </div>
     </Step>,
     <Step key="extras" title="Skills & extras" hint="Skills from your projects are added automatically. Add any others you have.">
       <div className="space-y-5">
@@ -191,10 +236,6 @@ export default function ResumeWizard({ onCancel, onUse, notify }) {
         <div>
           <p className="label">Certifications</p>
           <LineList items={answers.certifications} onChange={set('certifications')} placeholder="[Google Data Analytics](https://coursera.org/verify/…)" addLabel="Add certification" />
-        </div>
-        <div>
-          <p className="label">Achievements</p>
-          <LineList items={answers.achievements} onChange={set('achievements')} placeholder="Top 5% in a national coding contest" addLabel="Add achievement" />
         </div>
       </div>
     </Step>,
@@ -237,7 +278,7 @@ export default function ResumeWizard({ onCancel, onUse, notify }) {
         )}
       </div>
       {last && !ready && (
-        <p className="mt-2 text-right text-xs text-muted">Add your name and at least one project or internship to generate.</p>
+        <p className="mt-2 text-right text-xs text-muted">Add your name and a project, an activity or some skills to generate.</p>
       )}
       <p className="mt-6 text-center text-xs text-muted">
         Written on our server from your answers by FitLens's own rules. Nothing is sent to an AI service.

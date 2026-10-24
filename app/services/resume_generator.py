@@ -17,10 +17,19 @@ from __future__ import annotations
 from datetime import date
 import re
 
-from app.schemas.generator import GenerateEducation, GenerateItem, GenerateRequest, GenerateResponse
-from app.schemas.resume import ResumeEntry, StructuredResume
+from app.schemas.generator import (
+    GenerateActivity,
+    GenerateEducation,
+    GenerateItem,
+    GenerateRequest,
+    GenerateResponse,
+    ProjectIdeasRequest,
+    ProjectIdeasResponse,
+)
+from app.schemas.resume import ExtraSection, ResumeEntry, StructuredResume
 from app.services.ats_checker import ACTION_VERBS
 from app.services.job_decoder import decode_job
+from app.services.project_picker import pick_projects
 from app.services.role_gap import target_roles
 from app.services.skill_extractor import extract_skills
 
@@ -97,9 +106,43 @@ _APP = re.compile(r"\b(app|website|web site|portal|platform|dashboard|extension|
 _PEOPLE = re.compile(r"\b(users?|students?|employees|people|customers|members|visitors|clients|downloads)\b", re.I)
 _SCORE = re.compile(r"\b(accuracy|precision|recall|f1|score|rank|rating|auc|r2|r²)\b", re.I)
 _USED_BY = re.compile(r"^(used|adopted|loved|downloaded|trusted)\s+by\b", re.I)
+# Activities that read better as "Contributed to ..." than "Led ..."
+_ACTIVITY_PASSIVE = re.compile(r"^(a |an |the )?(drive|camp|campaign|event|fest|cleanup|team|club|community)", re.I)
+_HELPED = re.compile(
+    r"^(i\s+|we\s+)?(helped|helping|assisted|assisting|involved in|participated in|took part in)\b", re.I
+)
+_LEAD_ROLE = re.compile(
+    r"\b(lead|head|president|secretary|captain|coordinator|organi[sz]er|founder|chair|convener)\b", re.I
+)
+PAST_TENSE = {
+    "build": "Built",
+    "make": "Built",
+    "create": "Created",
+    "develop": "Developed",
+    "design": "Designed",
+    "organise": "Organized",
+    "organize": "Organized",
+    "manage": "Managed",
+    "lead": "Led",
+    "conduct": "Conducted",
+    "coordinate": "Coordinated",
+    "plan": "Planned",
+    "write": "Wrote",
+    "teach": "Taught",
+    "mentor": "Mentored",
+    "train": "Trained",
+    "implement": "Implemented",
+    "analyse": "Analyzed",
+    "analyze": "Analyzed",
+    "automate": "Automated",
+    "deploy": "Deployed",
+    "launch": "Launched",
+    "present": "Presented",
+    "host": "Organized",
+}
 _WEAK_START = re.compile(
-    r"^(i\s+|we\s+)?(worked on|working on|helped( to)?|assisted( in)?|involved in|responsible for|"
-    r"participated in|did|made|was|were|created a project (on|for))\s+",
+    r"^(i\s+|we\s+)?(worked on|working on|helped( to| in| with)?|helping( to| in| with)?|assisted( in| with)?|"
+    r"involved in|responsible for|participated in|did|made|was|were|created a project (on|for))\s+",
     re.I,
 )
 
@@ -154,9 +197,38 @@ def _strip_weak_start(text: str) -> str:
     return _WEAK_START.sub("", (text or "").strip())
 
 
+def _helped(text: str) -> bool:
+    """Did the student say they helped / assisted / took part (so we must not claim they led it)?"""
+    return bool(_HELPED.match((text or "").strip()))
+
+
+def _first_word(text: str) -> str:
+    return re.sub(r"[^a-z]", "", (text or "").strip().split(" ")[0].lower()) if (text or "").strip() else ""
+
+
 def _starts_with_verb(text: str) -> bool:
-    first = re.sub(r"[^a-z]", "", (text or "").split(" ")[0].lower()) if text.strip() else ""
-    return first in ACTION_VERBS or first in {"cut", "won", "led", "grew", "saved", "served", "reached", "sped"}
+    first = _first_word(text)
+    us = re.sub(r"is(ed|ing)$", r"iz\1", first)  # organised -> organized
+    if first in ACTION_VERBS or us in ACTION_VERBS or first in {"cut", "won", "led", "grew", "saved", "sped"}:
+        return True
+    return len(first) >= 5 and first.endswith("ed")  # attended, volunteered ...
+
+
+def _with_article(text: str) -> str:
+    """'blood donation drive' -> 'a blood donation drive'; plurals, numbers and 'the ...' unchanged."""
+    words = (text or "").split()
+    if not words or words[0].lower() in {"a", "an", "the", "my", "our", "their", "his", "her"} or words[0][0].isdigit():
+        return text
+    if any(w.lower().rstrip(".,").endswith("s") for w in words[:4]):
+        return text
+    return f"{'an' if words[0][0].lower() in 'aeiou' else 'a'} {text}"
+
+
+def _past_tense(text: str) -> str:
+    """'build a robot' -> 'Built a robot' for the common bare verbs; otherwise unchanged."""
+    first = _first_word(text)
+    past = PAST_TENSE.get(first)
+    return f"{past}{text.strip()[len(first) :]}" if past else text
 
 
 def _canonical(term: str) -> str | None:
@@ -198,14 +270,18 @@ class _Target:
 
 # ---------------------------------------------------------------------------- sections
 def _bullets(item: GenerateItem, tech: list[str], variant: int) -> list[str]:
-    what = _strip_weak_start(item.what)
-    details = _strip_weak_start(item.details)
+    helped = _helped(item.what)
+    what = _past_tense(_strip_weak_start(item.what))
+    details = _past_tense(_strip_weak_start(item.details))
     impact = _format_numbers(item.impact.strip().rstrip("."))
     kind = _kind_of(f"{item.what} {item.details} {item.title}")
     bullets: list[str] = []
 
     if what:
-        if _starts_with_verb(what):
+        if helped:
+            # "helped build X" -> "Collaborated to build X": never claim more than the student did
+            lead = f"Collaborated to {_lower_first(_strip_weak_start(item.what))}"
+        elif _starts_with_verb(what):
             lead = what
         else:
             verbs = LEAD_VERBS[kind]
@@ -243,6 +319,30 @@ def _bullets(item: GenerateItem, tech: list[str], variant: int) -> list[str]:
                 verb = "Delivered"
             bullets.append(_sentence(f"{verb} {_lower_first(impact)}"))
     return bullets[:MAX_BULLETS]
+
+
+def _activity(activity: GenerateActivity) -> str:
+    """'Event Coordinator, Coding Club (2025): Organised a 24-hour hackathon for 300 students.'"""
+    rest = _strip_weak_start(activity.what)
+    took_part = re.match(r"^(i\s+|we\s+)?(participated in|took part in)\s+", activity.what.strip(), re.I)
+    if took_part:
+        # Taking part is worth listing as it is: "Participated in the national finals"
+        what = f"Participated in {rest}" if rest else ""
+    elif _helped(activity.what):
+        bare = PAST_TENSE.get(_first_word(rest))
+        what = (
+            f"Collaborated to {_lower_first(rest)}" if bare else f"Contributed to {_with_article(_lower_first(rest))}"
+        )
+    else:
+        what = _past_tense(rest)
+        if what and not _starts_with_verb(what):
+            lead_role = _LEAD_ROLE.search(activity.role) and not _ACTIVITY_PASSIVE.search(what)
+            what = f"Led {_lower_first(what)}" if lead_role else f"Contributed to {_with_article(_lower_first(what))}"
+    head = ", ".join(x for x in (activity.role.strip(), activity.organization.strip()) if x)
+    if head and activity.date.strip():
+        head += f" ({activity.date.strip()})"
+    body = _sentence(_format_numbers(what))
+    return f"{head}: {body}" if head and body else head or body
 
 
 def _tech_order(item: GenerateItem, target: _Target) -> list[str]:
@@ -338,6 +438,8 @@ def _summary(request: GenerateRequest, top_skills: list[str], entries_count: tup
         parts = [f"{a}{f' aiming for {role} roles' if role else ''}."]
         if top:
             parts.append(f"Skilled in {top}{f', with hands-on experience from {built}' if built else ''}.")
+        elif not built:
+            parts.append("Eager to learn by building real projects and contributing to a team.")
     else:
         # "Aspiring Data Analyst and third-year B.Tech ... student"
         lowered = person[:1].lower() + person[1:] if level else person
@@ -359,6 +461,26 @@ def _headline(request: GenerateRequest) -> str:
     return f"{who} | Aspiring {role}" if role else who
 
 
+def _activities_section(activities: list[GenerateActivity]) -> list[ExtraSection]:
+    lines = [line for line in (_activity(a) for a in activities) if line]
+    return [ExtraSection(heading="Leadership & Activities", items=lines)] if lines else []
+
+
+def suggest_projects(request: ProjectIdeasRequest) -> ProjectIdeasResponse:
+    """Portfolio projects for students with few or no projects: they teach the role's
+    (and job's) skills the student doesn't list yet, building on the ones they do."""
+    have = {c for c in (_canonical(s) for s in request.skills) if c}
+    wanted = list(target_roles().get(request.target_role, []))
+    insights = None
+    if request.job_description.strip():
+        insights = decode_job(request.job_description, have)
+        wanted = list(dict.fromkeys([*insights.must_have, *insights.nice_to_have, *wanted]))
+    missing = [s for s in wanted if s not in have]
+    if not missing:  # nothing missing (or no role): suggest projects that use what they know
+        missing = sorted(have)
+    return ProjectIdeasResponse(projects=pick_projects(missing, have, insights, limit=3))
+
+
 def _estimated_lines(resume: StructuredResume) -> int:
     lines = 5 + 2 * 7  # header + headings
     lines += max(1, len(resume.summary) // 95 + 1)
@@ -366,6 +488,7 @@ def _estimated_lines(resume: StructuredResume) -> int:
     for entry in [*resume.experience, *resume.projects, *resume.education]:
         lines += 1 + (1 if entry.subtitle else 0) + sum(len(b) // 95 + 1 for b in entry.bullets)
     lines += len(resume.certifications) + len(resume.achievements)
+    lines += sum(len(x.items) + 2 for x in resume.additional)
     return lines
 
 
@@ -412,8 +535,13 @@ def generate_resume(request: GenerateRequest) -> GenerateResponse:
         education=education,
         certifications=[c.strip() for c in request.certifications if c.strip()],
         achievements=[a.strip() for a in request.achievements if a.strip()],
+        additional=_activities_section(request.activities),
     )
 
+    if not items:
+        notes.append(
+            "No projects yet? Pick one from the project ideas and build it: one real project changes a fresher resume."
+        )
     template = "tech-classic"
     if _estimated_lines(resume) > ONE_PAGE_LINES:
         template = "tech-compact"

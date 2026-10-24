@@ -8,6 +8,7 @@ Provides:
   POST /api/resume/docx   -- Download a structured resume as an ATS-friendly .docx (?template=, ?accent=).
   POST /api/resume/parse  -- Split an uploaded resume into editable sections (resume builder).
   POST /api/resume/generate -- Generate a full resume from quick answers (no AI service), optionally tailored to a job.
+  POST /api/resume/project-ideas -- Portfolio projects for a target role (students with few or no projects).
   POST /api/learn         -- Study plan for skills the student chooses.
   GET  /api/learn/catalog -- Skills with a curated roadmap, and career paths.
   POST /api/role-gap      -- Compare a resume with a target job role.
@@ -29,7 +30,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Query, Request, Respon
 from starlette.concurrency import run_in_threadpool
 
 from app.schemas import AnalyzeResponse, SuggestRolesResponse
-from app.schemas.generator import GenerateRequest, GenerateResponse
+from app.schemas.generator import GenerateRequest, GenerateResponse, ProjectIdeasRequest, ProjectIdeasResponse
 from app.schemas.github import GithubCheckRequest, GithubCheckResponse
 from app.schemas.insights import LearnRequest, LearnResponse, RoleGapRequest, RoleGapResponse
 from app.schemas.jobs import JobSearchRequest, JobSearchResponse
@@ -51,7 +52,7 @@ from app.services.pipeline import (
     run_role_suggestion,
 )
 from app.services.resume_docx import build_resume_docx, template_ids
-from app.services.resume_generator import generate_resume
+from app.services.resume_generator import generate_resume, suggest_projects
 
 logger = logging.getLogger(__name__)
 
@@ -293,6 +294,12 @@ async def github_check(payload: GithubCheckRequest) -> dict[str, Any]:
 async def resume_generate(payload: GenerateRequest) -> GenerateResponse:
     """Write a complete resume from the student's quick answers (rule-based; nothing leaves the server)."""
     return await run_in_threadpool(generate_resume, payload)
+
+
+@router.post("/resume/project-ideas", response_model=ProjectIdeasResponse)
+async def resume_project_ideas(payload: ProjectIdeasRequest) -> ProjectIdeasResponse:
+    """Up to three portfolio projects that teach what the target role or job needs."""
+    return await run_in_threadpool(suggest_projects, payload)
 
 
 @router.post("/resume/docx")

@@ -6,9 +6,15 @@ import unittest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.schemas.generator import GenerateEducation, GenerateItem, GenerateRequest
+from app.schemas.generator import (
+    GenerateActivity,
+    GenerateEducation,
+    GenerateItem,
+    GenerateRequest,
+    ProjectIdeasRequest,
+)
 from app.services.ats_checker import ACTION_VERBS
-from app.services.resume_generator import _level, generate_resume
+from app.services.resume_generator import _level, generate_resume, suggest_projects
 
 client = TestClient(app)
 
@@ -149,6 +155,70 @@ class EndpointTests(unittest.TestCase):
 
     def test_rejects_bad_input(self):
         self.assertEqual(client.post("/api/resume/generate", json={"variant": -1}).status_code, 422)
+
+    def test_project_ideas_endpoint(self):
+        response = client.post("/api/resume/project-ideas", json={"target_role": "Data Analyst", "skills": []})
+        self.assertEqual(response.status_code, 200, response.text)
+        projects = response.json()["projects"]
+        self.assertTrue(1 <= len(projects) <= 3)
+        self.assertTrue(all(p["bullet"] and p["steps"] for p in projects))
+
+
+class FresherTests(unittest.TestCase):
+    """Students with few or no projects: activities and project ideas."""
+
+    ACTIVITIES = [
+        GenerateActivity(
+            role="Event Coordinator",
+            organization="Coding Club",
+            date="2025",
+            what="organised a hackathon for 300 students",
+        ),
+        GenerateActivity(role="Volunteer", organization="NSS", what="blood donation drive with 150 donors"),
+        GenerateActivity(role="Member", organization="Robotics Club", what="helped build a line-follower robot"),
+        GenerateActivity(
+            role="Participant", organization="Smart India Hackathon", what="participated in the national finals"
+        ),
+        GenerateActivity(role="Volunteer", organization="Rotaract", what="helped in organizing an awareness event"),
+    ]
+
+    def test_activities_section_is_honest_and_polished(self):
+        result = generate_resume(GenerateRequest(name="Ravi", activities=self.ACTIVITIES))
+        section = result.resume.additional[0]
+        self.assertEqual(section.heading, "Leadership & Activities")
+        self.assertEqual(
+            section.items,
+            [
+                "Event Coordinator, Coding Club (2025): Organised a hackathon for 300 students.",
+                "Volunteer, NSS: Contributed to a blood donation drive with 150 donors.",
+                "Member, Robotics Club: Collaborated to build a line-follower robot.",
+                "Participant, Smart India Hackathon: Participated in the national finals.",
+                "Volunteer, Rotaract: Contributed to organizing an awareness event.",
+            ],
+        )
+
+    def test_first_year_with_no_projects_still_gets_a_resume_and_a_tip(self):
+        result = generate_resume(
+            GenerateRequest(
+                name="Ravi",
+                target_role="Software Engineer",
+                education=[GenerateEducation(degree="B.Tech", branch="Computer Science", end="2030")],
+                skills=["Python", "C"],
+            )
+        )
+        self.assertTrue(result.resume.summary.startswith("First-year"))
+        self.assertTrue(any("No projects yet" in note for note in result.notes))
+        self.assertIn("python", result.matched_skills)
+
+    def test_helped_is_never_upgraded_to_built(self):
+        items = [GenerateItem(title="Arm", what="helped build a robot arm", tech=["Arduino"])]
+        bullet = generate_resume(GenerateRequest(name="R", items=items)).resume.projects[0].bullets[0]
+        self.assertTrue(bullet.startswith("Collaborated to build a robot arm"), bullet)
+
+    def test_project_ideas_teach_missing_skills(self):
+        ideas = suggest_projects(ProjectIdeasRequest(target_role="Data Analyst", skills=["Excel"])).projects
+        self.assertTrue(ideas)
+        self.assertTrue(all("excel" not in p.closes for p in ideas))
 
 
 if __name__ == "__main__":

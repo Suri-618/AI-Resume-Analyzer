@@ -164,6 +164,12 @@ built, key technical work, the result with a number, tech used, link), and extra
 - **Tailoring:** projects are ranked by how many must-have / nice-to-have / role skills their tech covers.
 - **One page:** at most 4 projects and 3 bullets per entry; a long result switches to Tech Compact.
 - **`variant`** rotates verbs and sentence patterns ("Try another wording") without changing any fact.
+- **Honest verbs:** "helped build X" becomes "Collaborated to build X", never "Built X"; "participated in"
+  stays "Participated in"; "Led" is used only for lead roles (coordinator, president, head…).
+- **Activities** (clubs, events, hackathons, NSS/NCC, volunteering) become a "Leadership & Activities"
+  section, so a first-year with no projects still gets a real resume.
+- **No projects yet?** `POST /api/resume/project-ideas` picks up to three of the 36 curated project ideas
+  that teach the target role's (or job's) missing skills, with steps and the resume bullet each one earns.
 
 The request and response (`app/schemas/generator.py`) are the seam for an optional AI writer later.
 

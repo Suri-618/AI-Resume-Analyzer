@@ -18,6 +18,9 @@ export const emptyWizardItem = (kind = 'project') => ({
   link: '',
 });
 
+/** A blank club / event / volunteering activity for the resume wizard. */
+export const emptyWizardActivity = () => ({ _id: newId(), role: '', organization: '', date: '', what: '' });
+
 /** Add client-side ids to list entries so they animate and reorder cleanly. */
 export function withIds(resume) {
   const tag = (items) => (items || []).map((item) => ({ ...item, _id: newId() }));
