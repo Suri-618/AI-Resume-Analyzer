@@ -9,7 +9,7 @@ A free career toolkit for students and freshers. The home page is a dashboard of
 | Tool | Route | What it does |
 | --- | --- | --- |
 | **Check my resume** | `/check` | Upload a resume (PDF or DOCX), optionally with a job description, for the report below. |
-| **Build a resume** | `/build` | 12 ATS-friendly templates, a live preview, import from an existing resume, PDF and Word download, "check my score". The draft is saved in the browser. |
+| **Build a resume** | `/build` | 15 ATS-friendly templates, a live preview, import from an existing resume, PDF and Word download, "check my score". The draft is saved in the browser. |
 | **Find jobs & internships** | `/jobs` | Live openings (scored when you've checked a resume), what they ask for, and prefilled searches on LinkedIn, Internshala, Unstop, Naukri, Indeed, foundit, Cutshort and Instahyre. |
 | **Learn a skill** | `/learn` | Pick skills or a career path; get the study roadmap (order, videos, docs, checklists, weekly schedule) and projects. |
 
@@ -156,8 +156,25 @@ section order (standard, fresher, skills-first, academic) and spacing. The same 
 the browser preview (`ResumeDocument.jsx`), the PDF (the browser's print-to-PDF of a print-only
 copy, so the text stays selectable) and the Word file (`resume_docx.py`: A4, dates right-aligned
 with a tab stop). Every template stays ATS-safe: one column, standard headings, no tables, text
-boxes, icons or photos. Entries have a separate `date`; the parser moves a trailing date ("... |
+boxes or photos. Entries have a separate `date`; the parser moves a trailing date ("... |
 Jun 2024 - Present") into it.
+
+The three **Tech** templates (Tech Classic, Tech Modern, Tech Compact) follow the LaTeX layout
+common in software hiring: a letter-spaced name (`name_case`, `name_spacing`, `name_weight`),
+contact details with icons (`icons`) and links on their own line, ruled headings
+(`heading.rule_color`) and tighter line height (`line_height`). The icons are inline SVG shapes,
+not icon-font glyphs, so the PDF's extracted text stays clean for ATS; the Word file leaves them
+out.
+
+**Links and skill groups** (`app/services/rich_text.py`, mirrored in `frontend/src/lib/richText.js`):
+
+- Contact links, e-mail and phone are clickable in the PDF and Word file.
+- Each experience, project or education entry has an optional `link`, shown after the title as
+  the short address (`github.com/you/project`).
+- `[text](url)` anywhere in a bullet, summary, certification or other line becomes a link. Only
+  `http(s)`, `mailto:` and `tel:` links are created; anything else stays plain text. The text the
+  analysis sees shows them as `text (address)`.
+- Skills starting with a label (`Languages: Python`, then `Java`, ...) are shown as labelled rows.
 
 ### Accounts (Supabase)
 

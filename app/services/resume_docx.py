@@ -7,6 +7,9 @@ Templates differ only in safe styling (app/data/resume_templates.json): font,
 sizes, alignment, heading style (rule, small caps, accent colour, bar or shaded
 band), section order and spacing. Dates are right-aligned with a tab stop, not
 a table. The same file drives the browser preview, so the download matches it.
+
+Links are real Word hyperlinks (contact links, an entry's link and any
+``[text](url)`` the user wrote); the visible text stays readable for ATS.
 """
 
 from __future__ import annotations
@@ -19,11 +22,13 @@ import re
 
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT
+from docx.opc.constants import RELATIONSHIP_TYPE as RT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Pt, RGBColor
 
 from app.schemas.resume import ResumeEntry, StructuredResume
+from app.services.rich_text import group_skills, safe_url, short_url, split_links
 
 TEMPLATES_PATH = Path(__file__).resolve().parent.parent / "data" / "resume_templates.json"
 DEFAULT_TEMPLATE = "classic"
@@ -104,6 +109,38 @@ def _shade(paragraph, fill: str) -> None:
     paragraph._p.get_or_add_pPr().append(shd)
 
 
+def _hyperlink(paragraph, text: str, url: str, *, bold=False, italic=False, color: str | None = None, size=None):
+    """Append a clickable link run (a w:hyperlink pointing at an external relationship)."""
+    rel_id = paragraph.part.relate_to(url, RT.HYPERLINK, is_external=True)
+    link = OxmlElement("w:hyperlink")
+    link.set(qn("r:id"), rel_id)
+    run = paragraph.add_run(text)  # created in the paragraph, then moved inside the link
+    run.bold = bold or None
+    run.italic = italic or None
+    if color:
+        run.font.color.rgb = _rgb(color)
+    if size:
+        run.font.size = Pt(size)
+    link.append(run._r)
+    paragraph._p.append(link)
+    return run
+
+
+def _rich(paragraph, text: str, *, bold=False, italic=False, color: str | None = None, size=None) -> None:
+    """Add text to a paragraph, turning [text](url) into hyperlinks."""
+    for piece, url in split_links(text):
+        if url:
+            _hyperlink(paragraph, piece, url, bold=bold, italic=italic, color=color, size=size)
+        else:
+            run = paragraph.add_run(piece)
+            run.bold = bold or None
+            run.italic = italic or None
+            if color:
+                run.font.color.rgb = _rgb(color)
+            if size:
+                run.font.size = Pt(size)
+
+
 def _setup(document: Document, s: _Style) -> None:
     normal = document.styles["Normal"]
     normal.font.name = s.font
@@ -133,7 +170,11 @@ def _heading(document: Document, s: _Style, text: str) -> None:
         run.font.small_caps = True
     if h["underline"]:
         run.underline = True
-    rule_color = s.accent if s.picked or h["color"] == "accent" else (INK if h["rule"] == "thick" else RULE_GREY)
+    rule_color = {"ink": INK, "accent": s.accent}.get(h.get("rule_color", ""))
+    if rule_color is None:
+        rule_color = s.accent if s.picked or h["color"] == "accent" else (INK if h["rule"] == "thick" else RULE_GREY)
+    elif s.picked:
+        rule_color = s.accent
     if h["rule"] == "single":
         _border(paragraph, "bottom", {"val": "single", "sz": "6", "space": "1", "color": rule_color})
     elif h["rule"] == "double":
@@ -147,16 +188,21 @@ def _heading(document: Document, s: _Style, text: str) -> None:
 
 
 def _bullet(document: Document, text: str) -> None:
-    paragraph = document.add_paragraph(text.strip(), style="List Bullet")
+    paragraph = document.add_paragraph(style="List Bullet")
     paragraph.paragraph_format.space_after = Pt(1)
+    _rich(paragraph, text.strip())
 
 
-def _line_with_date(document: Document, s: _Style, text: str, date: str, bold: bool):
+def _line_with_date(document: Document, s: _Style, text: str, date: str, bold: bool, link: str = ""):
     paragraph = document.add_paragraph()
     paragraph.paragraph_format.tab_stops.add_tab_stop(s.width, WD_TAB_ALIGNMENT.RIGHT)
     paragraph.paragraph_format.keep_with_next = True
     if text:
-        paragraph.add_run(text).bold = bold
+        _rich(paragraph, text, bold=bold)
+    url = safe_url(link)
+    if url:
+        paragraph.add_run("  ")
+        _hyperlink(paragraph, short_url(link), url, color=MUTED, size=max(s.t["size"] - 1, 8))
     if date:
         run = paragraph.add_run(f"\t{date}")
         run.font.color.rgb = _rgb(MUTED)
@@ -170,16 +216,14 @@ def _entries(document: Document, s: _Style, heading: str, entries: list[ResumeEn
     _heading(document, s, heading)
     for entry in entries:
         title, subtitle, date = entry.title.strip(), entry.subtitle.strip(), entry.date.strip()
-        if title or date:
-            first = _line_with_date(document, s, title, date, bold=True)
+        if title or date or entry.link.strip():
+            first = _line_with_date(document, s, title, date, bold=True, link=entry.link)
             first.paragraph_format.space_before = Pt(4)
             first.paragraph_format.space_after = Pt(0)
         if subtitle:
             line = document.add_paragraph()
             line.paragraph_format.space_after = Pt(1)
-            run = line.add_run(subtitle)
-            run.italic = s.t["subtitle"] == "italic"
-            run.font.color.rgb = _rgb(MUTED)
+            _rich(line, subtitle, italic=s.t["subtitle"] == "italic", color=MUTED)
         for bullet in entry.bullets:
             if bullet.strip():
                 _bullet(document, bullet)
@@ -192,20 +236,47 @@ def _header(document: Document, resume: StructuredResume, s: _Style) -> None:
         name.alignment = align
         name.paragraph_format.space_after = Pt(2)
         run = name.add_run(resume.name.strip())
-        run.bold = True
+        run.font.all_caps = s.t.get("name_case") == "upper" or None  # display only; the text stays as typed
+        run.bold = s.t.get("name_weight", 700) >= 600
         run.font.size = Pt(s.t["name_size"])
         run.font.color.rgb = _rgb(s.strong(s.t["name_color"]))
+        spacing = s.t.get("name_spacing", 0)
+        if spacing:
+            r_spacing = OxmlElement("w:spacing")
+            r_spacing.set(qn("w:val"), str(round(spacing * s.t["name_size"] * 20)))
+            run._r.get_or_add_rPr().append(r_spacing)
     if resume.headline.strip():
         headline = document.add_paragraph()
         headline.alignment = align
         headline.add_run(resume.headline.strip()).font.color.rgb = _rgb(MUTED)
-    contact = s.t["separator"].join(
-        x.strip() for x in [resume.email, resume.phone, resume.location, *resume.links] if x.strip()
+    size = max(s.t["size"] - 1, 9)
+    items = [
+        (resume.email.strip(), safe_url(resume.email)),
+        (resume.phone.strip(), f"tel:{re.sub(r'[^0-9+]', '', resume.phone)}" if resume.phone.strip() else None),
+        (resume.location.strip(), None),
+        *[(x.strip(), safe_url(x)) for x in resume.links],
+    ]
+    items = [(text, url) for text, url in items if text]
+    links = sum(1 for x in resume.links if x.strip())
+    # Icon templates put the links on their own line, like LaTeX resumes
+    rows = (
+        [items[: len(items) - links], items[len(items) - links :]]
+        if s.t.get("icons") and 0 < links < len(items)
+        else [items]
     )
-    if contact:
+    for row in rows:
+        if not row:
+            continue
         line = document.add_paragraph()
         line.alignment = align
-        line.add_run(contact).font.size = Pt(max(s.t["size"] - 1, 9))
+        line.paragraph_format.space_after = Pt(0)
+        for i, (text, url) in enumerate(row):
+            if i:
+                line.add_run(s.t["separator"]).font.size = Pt(size)
+            if url:
+                _hyperlink(line, text, url, size=size)
+            else:
+                line.add_run(text).font.size = Pt(size)
 
 
 def build_resume_docx(resume: StructuredResume, template_id: str | None = None, accent: str | None = None) -> bytes:
@@ -218,13 +289,18 @@ def build_resume_docx(resume: StructuredResume, template_id: str | None = None, 
     def summary() -> None:
         if resume.summary.strip():
             _heading(document, s, "Summary")
-            document.add_paragraph(resume.summary.strip())
+            _rich(document.add_paragraph(), resume.summary.strip())
 
     def skills() -> None:
-        items = [x.strip() for x in resume.skills if x.strip()]
-        if items:
+        groups = group_skills(resume.skills)
+        if groups:
             _heading(document, s, "Skills")
-            document.add_paragraph(", ".join(items))
+            for label, values in groups:
+                paragraph = document.add_paragraph()
+                paragraph.paragraph_format.space_after = Pt(1)
+                if label:
+                    paragraph.add_run(f"{label}: ").bold = True
+                paragraph.add_run(", ".join(values))
 
     def lines(heading: str, items: list[str]) -> None:
         items = [i for i in items if i.strip()]

@@ -17,6 +17,7 @@ from __future__ import annotations
 import re
 
 from app.schemas.resume import ExtraSection, ResumeEntry, StructuredResume
+from app.services.rich_text import plain_links, short_url
 
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 PHONE_RE = re.compile(r"(?<![\w/])(?:\+?\d{1,3}[\s.-]?)?(?:\(?\d{2,5}\)?[\s.-]?){2,4}\d{2,5}(?![\w/])")
@@ -421,8 +422,10 @@ def _render_entries(entries: list[ResumeEntry]) -> list[str]:
         if entry.title or entry.date:
             out.append(" | ".join(x for x in (entry.title, entry.date) if x))
         if entry.subtitle:
-            out.append(entry.subtitle)
-        out.extend(f"• {bullet}" for bullet in entry.bullets if bullet.strip())
+            out.append(plain_links(entry.subtitle))
+        if entry.link.strip():
+            out.append(short_url(entry.link))
+        out.extend(f"• {plain_links(bullet)}" for bullet in entry.bullets if bullet.strip())
         out.append("")
     return out
 
@@ -444,13 +447,13 @@ def render_resume_text(resume: StructuredResume) -> str:
         if any(line.strip() for line in body):
             lines.extend([heading, *body, ""])
 
-    section("SUMMARY", [resume.summary] if resume.summary.strip() else [])
+    section("SUMMARY", [plain_links(resume.summary)] if resume.summary.strip() else [])
     section("SKILLS", [", ".join(s for s in resume.skills if s.strip())] if resume.skills else [])
     section("EXPERIENCE", _render_entries(resume.experience))
     section("PROJECTS", _render_entries(resume.projects))
     section("EDUCATION", _render_entries(resume.education))
-    section("CERTIFICATIONS", [f"• {c}" for c in resume.certifications if c.strip()])
-    section("ACHIEVEMENTS", [f"• {a}" for a in resume.achievements if a.strip()])
+    section("CERTIFICATIONS", [f"• {plain_links(c)}" for c in resume.certifications if c.strip()])
+    section("ACHIEVEMENTS", [f"• {plain_links(a)}" for a in resume.achievements if a.strip()])
     for extra in resume.additional:
-        section(extra.heading.upper(), [f"• {item}" for item in extra.items if item.strip()])
+        section(extra.heading.upper(), [f"• {plain_links(item)}" for item in extra.items if item.strip()])
     return "\n".join(lines).strip() + "\n"

@@ -281,7 +281,12 @@ export default function BuilderPage({ notify, onCheck, seed, onSeedUsed }) {
                 <div className="h-56 overflow-hidden rounded-lg bg-white shadow-[0_1px_4px_rgba(0,0,0,0.18)] transition group-hover:-translate-y-1">
                   <ScaledPage resume={SAMPLE_RESUME} templateId={tpl.id} />
                 </div>
-                <span className="mt-2 block font-semibold">{tpl.name}</span>
+                <span className="mt-2 flex items-center gap-2 font-semibold">
+                  {tpl.name}
+                  {tpl.id.startsWith('tech-') && (
+                    <span className="rounded-full bg-accent-soft px-1.5 py-0.5 text-[10px] font-bold text-accent">New</span>
+                  )}
+                </span>
                 <span className="block text-xs text-muted">{tpl.best_for.join(' · ')}</span>
               </button>
             </li>
@@ -314,7 +319,7 @@ export default function BuilderPage({ notify, onCheck, seed, onSeedUsed }) {
       </div>
       {pages > 1 && (
         <p className="mt-2 px-1 text-xs text-muted">
-          Over one page. For students, trim older or weaker bullets, or try a compact template (Campus, Engineer).
+          Over one page. For students, trim older or weaker bullets, or try a compact template (Tech Compact, Campus, Engineer).
         </p>
       )}
     </div>
@@ -325,7 +330,7 @@ export default function BuilderPage({ notify, onCheck, seed, onSeedUsed }) {
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0 }}
-      className="mx-auto w-full max-w-7xl px-4 pt-6 pb-24 sm:px-6"
+      className="mx-auto w-full max-w-[96rem] px-4 pt-6 pb-24 sm:px-6"
     >
       {/* Toolbar */}
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
@@ -438,7 +443,7 @@ export default function BuilderPage({ notify, onCheck, seed, onSeedUsed }) {
         ))}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,34rem)]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,38rem)] 2xl:grid-cols-[minmax(0,1fr)_minmax(0,46rem)]">
         <div className={view === 'edit' ? '' : 'hidden lg:block'}>
           <ResumeForm draft={resume} setDraft={setResume} />
         </div>

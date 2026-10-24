@@ -37,6 +37,7 @@ export default function ResumeForm({ draft, setDraft, missingSkills = [], missin
           </div>
           <div className="mt-4">
             <LineList label="Links" items={draft.links} onChange={set('links')} placeholder="linkedin.com/in/you" addLabel="Add link" />
+            <p className="mt-1.5 text-xs text-muted">Links are clickable in the PDF and Word file. Write the address itself (github.com/you) so ATS can read it too.</p>
           </div>
         </Section>
 
@@ -44,7 +45,7 @@ export default function ResumeForm({ draft, setDraft, missingSkills = [], missin
           <TextField label="Summary" hideLabel multiline rows={4} value={draft.summary} onChange={set('summary')} />
         </Section>
 
-        <Section title="Skills" hint="Type a skill and press Enter or comma.">
+        <Section title="Skills" hint="Type a skill and press Enter or comma. To group them, start with a label: “Languages: Python, Java, Tools: Git, Docker” shows as labelled rows.">
           <TagInput
             label="Skills"
             hideLabel
@@ -74,6 +75,7 @@ export default function ResumeForm({ draft, setDraft, missingSkills = [], missin
             titlePlaceholder="Software Intern, Acme Corp"
             subtitlePlaceholder="Hyderabad, India · Remote"
             datePlaceholder="May 2025 – Jul 2025"
+            linkPlaceholder="Offer letter, certificate or company site"
             addLabel="Add experience"
           />
         </Section>
@@ -83,10 +85,11 @@ export default function ResumeForm({ draft, setDraft, missingSkills = [], missin
             entries={draft.projects}
             onChange={set('projects')}
             titleLabel="Project name"
-            subtitleLabel="Tech used or link"
+            subtitleLabel="Tech used"
             titlePlaceholder="Event Registration Portal"
-            subtitlePlaceholder="React, FastAPI · github.com/you/portal"
+            subtitlePlaceholder="React, FastAPI, PostgreSQL"
             datePlaceholder="2025"
+            linkPlaceholder="github.com/you/portal or a live demo"
             addLabel="Add project"
           />
         </Section>
@@ -100,13 +103,14 @@ export default function ResumeForm({ draft, setDraft, missingSkills = [], missin
             titlePlaceholder="B.Tech in Computer Science"
             subtitlePlaceholder="State University · CGPA 8.6"
             datePlaceholder="2024 – 2028"
+            linkPlaceholder="University website (optional)"
             addLabel="Add education"
           />
         </Section>
 
         <div className="grid gap-5 lg:grid-cols-2">
-          <Section title="Certifications">
-            <LineList items={draft.certifications} onChange={set('certifications')} placeholder="Python for Everybody (Coursera)" addLabel="Add certification" />
+          <Section title="Certifications" hint="Link a certificate with [Name](https://link).">
+            <LineList items={draft.certifications} onChange={set('certifications')} placeholder="[Python for Everybody (Coursera)](https://coursera.org/verify/…)" addLabel="Add certification" />
           </Section>
           <Section title="Achievements">
             <LineList items={draft.achievements} onChange={set('achievements')} placeholder="Top 5% in a national coding contest" addLabel="Add achievement" />
