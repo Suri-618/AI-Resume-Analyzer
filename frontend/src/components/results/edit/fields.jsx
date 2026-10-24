@@ -210,6 +210,7 @@ export function EntryList({
   titlePlaceholder,
   subtitlePlaceholder,
   datePlaceholder = 'Jun 2024 – Present',
+  linkPlaceholder = 'github.com/you/project',
   addLabel,
 }) {
   const update = (id, patch) => onChange(entries.map((e) => (e._id === id ? { ...e, ...patch } : e)));
@@ -271,13 +272,16 @@ export function EntryList({
                 <div className="sm:col-span-2">
                   <TextField label={subtitleLabel} value={entry.subtitle} placeholder={subtitlePlaceholder} onChange={(v) => update(entry._id, { subtitle: v })} />
                 </div>
+                <div className="sm:col-span-2">
+                  <TextField label="Link (optional)" type="url" value={entry.link || ''} placeholder={linkPlaceholder} onChange={(v) => update(entry._id, { link: v })} />
+                </div>
               </div>
               <div className="mt-3">
                 <LineList
                   label="Bullet points"
                   items={entry.bullets}
                   multiline
-                  placeholder="Start with a verb and add a number, e.g. Built a portal used by 300+ students"
+                  placeholder="Start with a verb and add a number, e.g. Built a portal used by 300+ students. Links: [text](https://…)"
                   addLabel="Add bullet"
                   coach
                   onChange={(bullets) => update(entry._id, { bullets })}
@@ -292,7 +296,7 @@ export function EntryList({
         size="sm"
         icon={Plus}
         className="mt-3"
-        onClick={() => onChange([...entries, { _id: newId(), title: '', subtitle: '', date: '', bullets: [''] }])}
+        onClick={() => onChange([...entries, { _id: newId(), title: '', subtitle: '', date: '', link: '', bullets: [''] }])}
       >
         {addLabel}
       </Button>

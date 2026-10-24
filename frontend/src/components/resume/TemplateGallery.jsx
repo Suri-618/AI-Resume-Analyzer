@@ -89,6 +89,9 @@ export default function TemplateGallery({ open, onClose, resume, selected, onSel
                         <span className="flex items-center gap-2 font-semibold">
                           {t.name}
                           <span className="size-2.5 rounded-full" style={{ background: t.accent }} aria-hidden />
+                          {t.id.startsWith('tech-') && (
+                            <span className="rounded-full bg-accent-soft px-1.5 py-0.5 text-[10px] font-bold text-accent">New</span>
+                          )}
                         </span>
                         <span className="mt-0.5 line-clamp-2 block text-xs text-muted">{t.description}</span>
                         <span className="mt-1.5 flex flex-wrap gap-1">

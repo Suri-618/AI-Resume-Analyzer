@@ -16,6 +16,7 @@ class ResumeEntry(BaseModel):
     title: str = Field("", max_length=300)
     subtitle: str = Field("", max_length=300)
     date: str = Field("", max_length=60, description="e.g. 'Jun 2024 - Aug 2024'; shown right-aligned.")
+    link: str = Field("", max_length=300, description="Optional URL (code, demo, certificate); shown as a link.")
     bullets: list[str] = Field(default_factory=list, max_length=MAX_ITEMS)
 
 

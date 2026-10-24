@@ -157,7 +157,7 @@ export default function App() {
         page
         icon={FilePenLine}
         title="Resume builder"
-        text="Build your resume with 12 ATS-friendly templates, a live preview and PDF or Word download. Your resumes are saved to your account."
+        text="Build your resume with 15 ATS-friendly templates, a live preview and PDF or Word download. Your resumes are saved to your account."
         reason="Sign in to build and save your resumes."
       />
     );

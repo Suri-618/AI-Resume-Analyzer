@@ -1,4 +1,6 @@
+import { groupSkills, safeUrl, shortUrl, splitLinks } from '../../lib/richText';
 import { DENSITY, FONTS, ORDERS, templateById } from '../../lib/templates';
+import { ExternalIcon, GithubIcon, LinkedinIcon, LinkIcon, MailIcon, PhoneIcon, PinIcon } from './ResumeIcons';
 
 const INK = '#1f2328';
 const MUTED = '#555b63';
@@ -12,6 +14,29 @@ function tint(hex, amount = 0.88) {
 }
 
 const clean = (items) => (items || []).filter((x) => x && String(x).trim());
+// Links look like the text around them on paper (no blue, no underline) but stay clickable in the PDF
+const linkStyle = { color: 'inherit', textDecoration: 'none' };
+
+/** The icon for a contact link, chosen from its address. */
+function iconForLink(value) {
+  const v = String(value || '').toLowerCase();
+  if (v.includes('github.com')) return GithubIcon;
+  if (v.includes('linkedin.com')) return LinkedinIcon;
+  return LinkIcon;
+}
+
+/** Text with [label](url) turned into links. */
+function RichText({ text }) {
+  return splitLinks(text).map((part, i) =>
+    part.url ? (
+      <a key={i} href={part.url} target="_blank" rel="noreferrer" style={linkStyle}>
+        {part.text}
+      </a>
+    ) : (
+      <span key={i}>{part.text}</span>
+    ),
+  );
+}
 const hasEntries = (entries) => (entries || []).some((e) => e.title?.trim() || e.subtitle?.trim() || clean(e.bullets).length);
 
 /**
@@ -31,7 +56,14 @@ export default function ResumeDocument({ resume, templateId, accent, print = fal
   const nameColor = picked ? color : tone(t.name_color);
   const pt = (n) => `${n}pt`;
 
-  const ruleColor = picked || h.color === 'accent' ? color : h.rule === 'thick' ? INK : RULE_GREY;
+  const ruleColor =
+    h.rule_color === 'ink' && !picked
+      ? INK
+      : picked || h.color === 'accent' || h.rule_color === 'accent'
+        ? color
+        : h.rule === 'thick'
+          ? INK
+          : RULE_GREY;
   const headingStyle = {
     fontSize: pt(h.size),
     fontWeight: 700,
@@ -63,7 +95,7 @@ export default function ResumeDocument({ resume, templateId, accent, print = fal
       <ul style={{ margin: `${pt(1)} 0 0`, paddingLeft: '1.25em', listStyle: 'disc' }}>
         {clean(items).map((item, i) => (
           <li key={i} style={{ marginBottom: pt(1) }}>
-            {item}
+            <RichText text={item} />
           </li>
         ))}
       </ul>
@@ -77,15 +109,34 @@ export default function ResumeDocument({ resume, templateId, accent, print = fal
           .filter((e) => e.title?.trim() || e.subtitle?.trim() || clean(e.bullets).length)
           .map((entry, i) => (
             <div key={entry._id || i} style={{ marginTop: i ? pt(5) : pt(2) }}>
-              {(entry.title?.trim() || entry.date?.trim()) && (
+              {(entry.title?.trim() || entry.date?.trim() || safeUrl(entry.link)) && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12pt', breakAfter: 'avoid' }}>
-                  <strong>{entry.title}</strong>
+                  <span>
+                    <strong>
+                      <RichText text={entry.title} />
+                    </strong>
+                    {safeUrl(entry.link) && (
+                      <a
+                        href={safeUrl(entry.link)}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ ...linkStyle, color: MUTED, fontSize: '0.9em', marginLeft: '0.5em', whiteSpace: 'nowrap' }}
+                      >
+                        {t.icons && (
+                          <>
+                            <ExternalIcon />{' '}
+                          </>
+                        )}
+                        {shortUrl(entry.link)}
+                      </a>
+                    )}
+                  </span>
                   {entry.date?.trim() && <span style={{ color: MUTED, whiteSpace: 'nowrap' }}>{entry.date}</span>}
                 </div>
               )}
               {entry.subtitle?.trim() && (
                 <div style={{ color: MUTED, fontStyle: t.subtitle === 'italic' ? 'italic' : 'normal', marginBottom: pt(1) }}>
-                  {entry.subtitle}
+                  <RichText text={entry.subtitle} />
                 </div>
               )}
               <Bullets items={entry.bullets} />
@@ -107,16 +158,32 @@ export default function ResumeDocument({ resume, templateId, accent, print = fal
       resume.summary?.trim() ? (
         <section key="summary">
           <Heading>Summary</Heading>
-          <p style={{ margin: 0 }}>{resume.summary}</p>
+          <p style={{ margin: 0 }}>
+            <RichText text={resume.summary} />
+          </p>
         </section>
       ) : null,
-    skills: () =>
-      clean(resume.skills).length ? (
+    skills: () => {
+      const groups = groupSkills(resume.skills);
+      if (!groups.length) return null;
+      // "Languages: Python, Java" rows when the skills are grouped, one line otherwise
+      const labelled = groups.some((g) => g.label);
+      return (
         <section key="skills">
           <Heading>Skills</Heading>
-          <p style={{ margin: 0 }}>{clean(resume.skills).join(', ')}</p>
+          {labelled ? (
+            groups.map((g, i) => (
+              <div key={i} style={{ marginBottom: pt(1) }}>
+                {g.label && <strong>{g.label}: </strong>}
+                {g.items.join(', ')}
+              </div>
+            ))
+          ) : (
+            <p style={{ margin: 0 }}>{groups[0].items.join(', ')}</p>
+          )}
         </section>
-      ) : null,
+      );
+    },
     experience: () => <Entries key="experience" heading="Experience" entries={resume.experience} />,
     projects: () => <Entries key="projects" heading="Projects" entries={resume.projects} />,
     education: () => <Entries key="education" heading="Education" entries={resume.education} />,
@@ -124,7 +191,21 @@ export default function ResumeDocument({ resume, templateId, accent, print = fal
     achievements: () => <Lines key="achievements" heading="Achievements" items={resume.achievements} />,
   };
 
-  const contact = clean([resume.email, resume.phone, resume.location, ...(resume.links || [])]).join(t.separator);
+  // Contact details: clickable email, phone and links, with icons in the templates that use them
+  const contact = [
+    { text: resume.email, url: safeUrl(resume.email), Icon: MailIcon },
+    { text: resume.phone, url: resume.phone?.trim() ? `tel:${resume.phone.replace(/[^0-9+]/g, '')}` : null, Icon: PhoneIcon },
+    { text: resume.location, url: null, Icon: PinIcon },
+    ...(resume.links || []).map((l) => ({ text: l, url: safeUrl(l), Icon: iconForLink(l) })),
+  ].filter((c) => c.text?.trim());
+  // Icon templates put the links on their own line, like LaTeX resumes
+  const linkCount = (resume.links || []).filter((l) => l?.trim()).length;
+  const contactRows =
+    t.icons && linkCount && contact.length > linkCount
+      ? [contact.slice(0, contact.length - linkCount), contact.slice(contact.length - linkCount)]
+      : contact.length
+        ? [contact]
+        : [];
   const align = t.align === 'center' ? 'center' : 'left';
 
   return (
@@ -135,7 +216,7 @@ export default function ResumeDocument({ resume, templateId, accent, print = fal
         color: INK,
         fontFamily: FONTS[t.font].css,
         fontSize: pt(t.size),
-        lineHeight: 1.3,
+        lineHeight: t.line_height || 1.3,
         // On screen the page margin is padding; when printing, @page sets it
         padding: print ? 0 : pt(density.margin),
         width: print ? 'auto' : '595.3pt',
@@ -148,18 +229,41 @@ export default function ResumeDocument({ resume, templateId, accent, print = fal
         <h1
           style={{
             fontSize: pt(t.name_size),
-            fontWeight: 700,
+            fontWeight: t.name_weight || 700,
             margin: `0 0 ${pt(2)}`,
             lineHeight: 1.1,
             textAlign: align,
             color: nameColor,
+            textTransform: t.name_case === 'upper' ? 'uppercase' : 'none',
+            letterSpacing: t.name_spacing ? `${t.name_spacing}em` : 'normal',
           }}
         >
           {resume.name}
         </h1>
       )}
       {resume.headline?.trim() && <p style={{ margin: 0, color: MUTED, textAlign: align }}>{resume.headline}</p>}
-      {contact && <p style={{ margin: `${pt(2)} 0 0`, fontSize: pt(Math.max(t.size - 1, 9)), textAlign: align }}>{contact}</p>}
+      {contactRows.map((row, r) => (
+        <p key={r} style={{ margin: `${pt(r ? 0 : 2)} 0 0`, fontSize: pt(Math.max(t.size - 1, 9)), textAlign: align }}>
+          {row.map(({ text, url, Icon }, i) => (
+            // inline-block: an item never splits, but the line can wrap between items
+            <span key={i} style={{ display: 'inline-block', whiteSpace: 'nowrap' }}>
+              {i > 0 && <span style={{ whiteSpace: 'pre', color: MUTED }}>{t.separator}</span>}
+              {t.icons && (
+                <>
+                  <Icon />{' '}
+                </>
+              )}
+              {url ? (
+                <a href={url} target="_blank" rel="noreferrer" style={linkStyle}>
+                  {text.trim()}
+                </a>
+              ) : (
+                text.trim()
+              )}
+            </span>
+          ))}
+        </p>
+      ))}
 
       {ORDERS[t.order].map((key) => sections[key]())}
       {(resume.additional || [])

@@ -18,7 +18,7 @@ export const TOOLS = [
     short: 'Build',
     icon: FilePenLine,
     tone: 'bg-accent-soft text-accent',
-    description: '12 ATS-friendly templates. Edit with a live preview, then download as PDF or Word.',
+    description: '15 ATS-friendly templates, including LaTeX-style tech layouts. Edit with a live preview, then download as PDF or Word.',
   },
   {
     id: 'jobs',

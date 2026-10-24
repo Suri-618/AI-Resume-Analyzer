@@ -41,7 +41,7 @@ provider.
   and low-confidence predictions are flagged honestly.
 - **Built for real resumes.** Parses PDF and Word files, including hidden GitHub/LinkedIn hyperlinks, Word
   bullet styles and two-column layouts, then runs an ATS-friendliness check with a fix for every problem.
-- **End-to-end product.** Resume builder with 12 ATS-safe templates (PDF + Word), live jobs scored against
+- **End-to-end product.** Resume builder with 15 ATS-safe templates (PDF + Word) and clickable links, live jobs scored against
   the resume, hackathon finder, week-by-week learning roadmaps, an application tracker and accounts.
 - **Production quality.** 253 automated tests and linting on every pull request (GitHub Actions), a
   Dockerised API with rate limiting and file-signature checks, and row-level security in PostgreSQL.
@@ -55,7 +55,7 @@ provider.
     <td width="50%"><img src="docs/screenshots/report-edit.png" alt="Edit and re-check" /><br/><b>Edit &amp; re-check</b> — editable sections, a live bullet-point coach, instant re-scoring and Word export.</td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/builder.png" alt="Resume builder" /><br/><b>Resume builder</b> — 12 ATS-safe templates, accent colours, live preview, PDF and Word download.</td>
+    <td><img src="docs/screenshots/builder.png" alt="Resume builder" /><br/><b>Resume builder</b> — 15 ATS-safe templates (incl. LaTeX-style tech layouts), clickable links, live preview, PDF and Word download.</td>
     <td><img src="docs/screenshots/jobs.png" alt="Live jobs" /><br/><b>Jobs &amp; internships</b> — live openings with a fit score each, what employers ask for, one-click searches on 8 job sites.</td>
   </tr>
   <tr>
