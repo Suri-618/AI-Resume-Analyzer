@@ -203,6 +203,16 @@ export async function parseResumeFile(file) {
   return response.json();
 }
 
+/** Generate a full resume from the wizard's quick answers (rule-based on the server; no AI service). */
+export async function generateResume(answers) {
+  const response = await request('/api/resume/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(answers),
+  });
+  return response.json();
+}
+
 /** Study plan for skills the student wants to learn, skipping prerequisites they know. */
 export async function fetchLearnPlan(skills, known = []) {
   const response = await request('/api/learn', {

@@ -4,6 +4,20 @@ let nextId = 0;
 /** Stable client-side ids for list items (the API ignores unknown fields). */
 export const newId = () => `i${++nextId}`;
 
+/** A blank project / internship for the resume wizard (quick facts, see app/schemas/generator.py). */
+export const emptyWizardItem = (kind = 'project') => ({
+  _id: newId(),
+  kind,
+  title: '',
+  organization: '',
+  date: '',
+  tech: [],
+  what: '',
+  details: '',
+  impact: '',
+  link: '',
+});
+
 /** Add client-side ids to list entries so they animate and reorder cleanly. */
 export function withIds(resume) {
   const tag = (items) => (items || []).map((item) => ({ ...item, _id: newId() }));

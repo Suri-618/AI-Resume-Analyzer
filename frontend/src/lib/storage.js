@@ -4,6 +4,7 @@
 
 export const KEYS = {
   builder: 'fitlens:builder',
+  wizard: 'fitlens:resume-wizard',
   progress: 'fitlens:roadmap-progress',
   pace: 'fitlens:hours-per-week',
 };

@@ -13,6 +13,7 @@ import {
   RotateCcw,
   ScanSearch,
   Sparkles,
+  WandSparkles,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { downloadResumeDocx, parseResumeFile } from '../../lib/api';
@@ -24,9 +25,16 @@ import { DEFAULT_TEMPLATE, EMPTY_RESUME, loadTemplateFonts, SAMPLE_RESUME, templ
 import PrintResume from '../resume/PrintResume';
 import ResumeForm from '../resume/ResumeForm';
 import ResumeLibrary from '../resume/ResumeLibrary';
+import ResumeWizard from '../resume/ResumeWizard';
 import ScaledPage from '../resume/ScaledPage';
 import TemplateGallery from '../resume/TemplateGallery';
 import Button from '../ui/Button';
+
+const ArrowRightIcon = () => (
+  <span className="hidden text-sm font-semibold text-accent sm:block" aria-hidden>
+    Start →
+  </span>
+);
 
 const ACCENTS = ['#1d4ed8', '#047857', '#0f766e', '#9f1239', '#7c3aed', '#c2410c', '#111827'];
 const plain = (resume) => JSON.parse(snapshot(resume));
@@ -81,6 +89,8 @@ export default function BuilderPage({ notify, onCheck, seed, onSeedUsed }) {
   const [view, setView] = useState('edit');
   const [pages, setPages] = useState(1);
   const [busy, setBusy] = useState(null); // 'upload' | 'docx' | 'check'
+  // The "Generate my resume" wizard; /build?start=generate opens it directly
+  const [wizard, setWizard] = useState(() => !seed && params.get('start') === 'generate');
   const fileInput = useRef(null);
   const t = templateById(template);
 
@@ -211,6 +221,28 @@ export default function BuilderPage({ notify, onCheck, seed, onSeedUsed }) {
 
   const onPages = useCallback((n) => setPages(n), []);
 
+  if (wizard) {
+    return (
+      <motion.main
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0 }}
+        className="mx-auto w-full max-w-6xl px-4 pt-8 pb-24 sm:px-6"
+      >
+        <ResumeWizard
+          notify={notify}
+          onCancel={() => setWizard(false)}
+          onUse={(generated, generatedTemplate) => {
+            setTemplate(generatedTemplate);
+            start(generated);
+            setWizard(false);
+            notify({ tone: 'success', message: 'Your resume is in the builder. Edit anything, then download it.' });
+          }}
+        />
+      </motion.main>
+    );
+  }
+
   // Start screen
   if (!resume) {
     return (
@@ -225,7 +257,28 @@ export default function BuilderPage({ notify, onCheck, seed, onSeedUsed }) {
           {TEMPLATES.length} ATS-friendly templates, a live preview and instant PDF or Word download. Your draft is saved in this
           browser.
         </p>
-        <div className="mt-8 grid gap-4 md:grid-cols-3">
+        <motion.button
+          type="button"
+          onClick={() => setWizard(true)}
+          whileHover={{ y: -4 }}
+          className="card mt-8 flex w-full cursor-pointer flex-col items-start gap-4 border-accent/40 bg-accent-soft/40 p-6 text-left hover:border-accent sm:flex-row sm:items-center"
+        >
+          <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-accent text-white">
+            <WandSparkles className="size-6" aria-hidden />
+          </span>
+          <span className="flex-1">
+            <span className="flex items-center gap-2 font-display text-xl font-semibold">
+              Generate my resume
+              <span className="rounded-full bg-accent px-2 py-0.5 font-sans text-[11px] font-bold text-white">New</span>
+            </span>
+            <span className="mt-1 block text-sm text-muted">
+              Answer a few quick questions about your projects and goal. FitLens writes the summary, strong bullet points and
+              grouped skills, tailored to a job if you paste one.
+            </span>
+          </span>
+          <ArrowRightIcon />
+        </motion.button>
+        <div className="mt-4 grid gap-4 md:grid-cols-3">
           <StartChoice
             icon={FileUp}
             title="Import my resume"

@@ -146,6 +146,27 @@ classifier's 24 dataset categories because those are broad (the dataset's IT cat
 infrastructure resumes) and would give a software student misleading gaps. The resume strength
 report is computed in the browser (`frontend/src/lib/strength.js`) so it updates while editing.
 
+### Resume generator
+
+"Generate my resume" in the builder (`/build?start=generate`) asks five short steps: contact details,
+target role (and an optional job post), education, projects and internships as quick facts (what you
+built, key technical work, the result with a number, tech used, link), and extra skills. `POST
+/api/resume/generate` (`app/services/resume_generator.py`) writes the resume **without any AI service**:
+
+- **Bullets:** weak openers ("worked on", "helped") are removed, each bullet starts with a verb the bullet
+  coach accepts (chosen from what was built: Trained for models, Automated for scripts, Built for apps),
+  the tech is named with job-matching tech first, the result becomes its own bullet (or "…, used by 1,200
+  students"), and numbers are formatted.
+- **Summary and headline** from the year of study (worked out from the graduation year), degree, target role,
+  the skills the job wants most and the number of projects and internships.
+- **Skills** are only the ones the student listed, grouped into labelled rows. Skills the job or target role
+  asks for that are missing come back as `suggested_skills`, to add only if true.
+- **Tailoring:** projects are ranked by how many must-have / nice-to-have / role skills their tech covers.
+- **One page:** at most 4 projects and 3 bullets per entry; a long result switches to Tech Compact.
+- **`variant`** rotates verbs and sentence patterns ("Try another wording") without changing any fact.
+
+The request and response (`app/schemas/generator.py`) are the seam for an optional AI writer later.
+
 ### Resume builder
 
 Templates live in `app/data/resume_templates.json` (mirrored in `frontend/src/lib/resumeTemplates.json`;
