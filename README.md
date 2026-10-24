@@ -10,7 +10,7 @@
 [![Sample report](https://img.shields.io/badge/Sample_report-no_upload_needed-3451f0?style=for-the-badge)](https://resumefitlens.vercel.app/check?demo=high)
 
 [![CI](https://github.com/Vardhansaigadde/AI-RESUME-ANALYZER/actions/workflows/ci.yml/badge.svg)](https://github.com/Vardhansaigadde/AI-RESUME-ANALYZER/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-253_passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-281_passing-brightgreen)
 ![Python](https://img.shields.io/badge/Python-3.14-3776AB?logo=python&logoColor=white)
 ![scikit-learn](https://img.shields.io/badge/scikit--learn-1.9-F7931E?logo=scikitlearn&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
@@ -41,9 +41,12 @@ provider.
   and low-confidence predictions are flagged honestly.
 - **Built for real resumes.** Parses PDF and Word files, including hidden GitHub/LinkedIn hyperlinks, Word
   bullet styles and two-column layouts, then runs an ATS-friendliness check with a fix for every problem.
+- **Generates a resume from quick answers.** A student describes their projects in a few words; a rule-based
+  generator writes the summary, action-verb bullets with formatted numbers and grouped skills, tailored to a
+  pasted job (matching projects and skills first, missing keywords suggested, never invented).
 - **End-to-end product.** Resume builder with 15 ATS-safe templates (PDF + Word) and clickable links, live jobs scored against
   the resume, hackathon finder, week-by-week learning roadmaps, an application tracker and accounts.
-- **Production quality.** 253 automated tests and linting on every pull request (GitHub Actions), a
+- **Production quality.** 281 automated tests and linting on every pull request (GitHub Actions), a
   Dockerised API with rate limiting and file-signature checks, and row-level security in PostgreSQL.
 - **Privacy first.** Resumes are processed in memory and never stored or sent to an AI service.
 
@@ -118,7 +121,7 @@ Decisions worth calling out:
 | Backend | Python 3.14, FastAPI, Pydantic, pdfplumber, python-docx |
 | Frontend | React 19, Vite, Tailwind CSS 4, Framer Motion |
 | Data and auth | Supabase (PostgreSQL, Google / email sign-in, row-level security) |
-| Quality and delivery | pytest (253 tests), ruff, GitHub Actions CI, Docker, Render, Vercel |
+| Quality and delivery | pytest (281 tests), ruff, GitHub Actions CI, Docker, Render, Vercel |
 
 ## Run it locally
 

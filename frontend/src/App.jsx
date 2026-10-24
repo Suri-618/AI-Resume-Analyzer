@@ -1,6 +1,6 @@
 import { AnimatePresence } from 'framer-motion';
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
-import { FilePenLine, GraduationCap } from 'lucide-react';
+import { GraduationCap } from 'lucide-react';
 import AnalyzingView from './components/AnalyzingView';
 import SignInRequired from './components/auth/SignInRequired';
 import Footer from './components/layout/Footer';
@@ -71,7 +71,7 @@ export default function App() {
   const showError = useCallback((message) => setToast(message ? { tone: 'error', message } : null), []);
 
   const { user, ready: authReady, enabled: accounts } = useAuth();
-  // Build and Learn need an account (when accounts are set up at all)
+  // Learn needs an account (when accounts are set up at all); the builder is open to everyone
   const locked = accounts && authReady && !user;
 
   // Anonymous page counts for the owner's dashboard; recounted after sign-in so the
@@ -148,19 +148,8 @@ export default function App() {
   let content;
   if (page === 'home') content = <Dashboard key="home" onNavigate={navigate} />;
   else if (page === 'admin') content = <AdminPage key="admin" onHome={goHome} />;
-  else if ((page === 'build' || page === 'learn') && accounts && !authReady)
+  else if (page === 'learn' && accounts && !authReady)
     content = <main key="wait" className="min-h-[60vh]" aria-busy="true" />;
-  else if (page === 'build' && locked)
-    content = (
-      <SignInRequired
-        key="build-locked"
-        page
-        icon={FilePenLine}
-        title="Resume builder"
-        text="Build your resume with 15 ATS-friendly templates, a live preview and PDF or Word download. Your resumes are saved to your account."
-        reason="Sign in to build and save your resumes."
-      />
-    );
   else if (page === 'learn' && locked)
     content = (
       <SignInRequired
