@@ -1,4 +1,4 @@
-export const REPO_URL = 'https://github.com/Vardhansaigadde/AI-RESUME-ANALYZER';
+export const REPO_URL = 'https://github.com/Suri-618/AI-Resume-Analyzer';
 
 export default function Footer({ onNavigate }) {
   const link = (path, label) => (
