@@ -1,466 +1,785 @@
-# FitLens — Technical guide
+# FitLens — Technical Guide
 
-> How every part of FitLens works, the data and model results in detail, the API, and how to run, retrain and deploy it. For the overview, see the [README](../README.md).
+> How every part of FitLens works, the data and model results in detail, the API, and how to run, retrain and deploy it. For the project overview, see the [README](../README.md).
 
-[![CI](https://github.com/Vardhansaigadde/AI-RESUME-ANALYZER/actions/workflows/ci.yml/badge.svg)](https://github.com/Vardhansaigadde/AI-RESUME-ANALYZER/actions/workflows/ci.yml)
+[![CI](https://github.com/Suri-618/AI-Resume-Analyzer/actions/workflows/ci.yml/badge.svg)](https://github.com/Suri-618/AI-Resume-Analyzer/actions/workflows/ci.yml)
+
+**Live application:** https://ai-resume-analyzer-plus.vercel.app/  
+**Backend API:** https://ai-resume-analyzer-api-9709.onrender.com/  
+**GitHub repository:** https://github.com/Suri-618/AI-Resume-Analyzer
 
 A free career toolkit for students and freshers. The home page is a dashboard of four tools:
 
 | Tool | Route | What it does |
-| --- | --- | --- |
-| **Check my resume** | `/check` | Upload a resume (PDF or DOCX), optionally with a job description, for the report below. |
-| **Build a resume** | `/build` | 15 ATS-friendly templates, a live preview, import from an existing resume, PDF and Word download, "check my score". The draft is saved in the browser. |
-| **Find jobs & internships** | `/jobs` | Live openings (scored when you've checked a resume), what they ask for, and prefilled searches on LinkedIn, Internshala, Unstop, Naukri, Indeed, foundit, Cutshort and Instahyre. |
-| **Learn a skill** | `/learn` | Pick skills or a career path; get the study roadmap (order, videos, docs, checklists, weekly schedule) and projects. |
+|---|---|---|
+| **Check my resume** | `/check` | Upload a resume (PDF or DOCX), optionally with a job description, for the analysis report. |
+| **Build a resume** | `/build` | 15 ATS-friendly templates, live preview, import from an existing resume, PDF and Word downloads, and resume score checking. Drafts are saved in the browser. |
+| **Find jobs & internships** | `/jobs` | Live openings, matching scores, requested skills, and prefilled searches on job platforms. |
+| **Learn a skill** | `/learn` | Choose skills or a career path and get a study roadmap with resources, checklists, schedules, and projects. |
 
-Signing in is optional (Google or an email link, via Supabase). With an account, resumes from the
-builder, roadmap progress and an **application tracker** (`/tracker`: Saved → Applied → Interview →
-Offer) are saved and follow you across devices; without one, everything still works and drafts stay
-in the browser.
+Signing in is optional (Google or an email link, via Supabase). With an account, supported data such as resumes, roadmap progress, and the application tracker (`/tracker`: Saved → Applied → Interview → Offer) can be saved across devices. Without an account, the application remains usable and drafts stay in the browser.
 
 The resume report has five tabs:
 
 | Tab | What you get |
-| --- | --- |
-| **Overview** | With a job: a **match score (0–100)** and why, plus the posting decoded (level, experience, must-have and nice-to-have skills you have or lack, which skills to list first). Always: a **resume strength** grade per section, your **target-role gap** (core skills of 25 job-title roles), the job categories your resume resembles, every **skill found**, and a **GitHub proof check** (which resume skills your public repos back up, which they don't, skills your repos show that the resume misses, and profile fixes). |
-| **ATS check** | A 0–100 estimate of how well applicant tracking systems can read the resume (layout, sections, contact details, bullets, keywords), each problem with a fix. **Student mode** adds a fresher checklist (projects, internships, CGPA, GitHub, one page). |
-| **Edit & re-check** | The resume split into editable sections, a live **bullet coach** (weak openers, missing numbers, passive voice), one-click re-check, and download as an ATS-friendly `.docx`. |
-| **Skill plan** | **One or two portfolio projects** that close several gaps at once (steps and a ready resume bullet), then a study **roadmap** for the missing skills (from the job, or your target role when there's no job): in learning order with missing prerequisites first, hours and a week-by-week estimate at your pace, docs + a free course + a YouTube video for each skill, a "done when you can…" checklist with progress saved in the browser, a project that proves it, and roadmap.sh links. |
-| **Find jobs** | Live jobs and internships (search by role, country, and All / Internships / Entry-level), each with **your fit score**, the skills you have and miss, and a link to apply; plus **what these openings ask for**: the most-requested skills across the results, with the ones you show ticked. |
+|---|---|
+| **Overview** | Match score (0–100) when a job description is supplied, explanation of the score, posting insights, resume strength, target-role gap, job categories, extracted skills, and GitHub proof check. |
+| **ATS check** | A 0–100 estimate of ATS compatibility, covering layout, sections, contact details, bullets, and keywords. Student mode adds a fresher checklist. |
+| **Edit & re-check** | Editable resume sections, bullet coach feedback, one-click re-check, and ATS-friendly DOCX download. |
+| **Skill plan** | Portfolio project recommendations and a learning roadmap for missing skills, including prerequisites, learning resources, estimated hours, checklists, and project ideas. |
+| **Find jobs** | Live jobs and internships, fit scores, matched and missing skills, application links, and skill-demand insights. |
 
-Live app: <https://resumefitlens.vercel.app> · Backend: FastAPI on Render · Frontend: React + Vite on Vercel
+---
 
 ## How it works
 
 ```text
 Browser (React, Vercel)
-  │  POST {VITE_API_BASE_URL}/api/analyze   multipart: resume_file + job_description
+  │
+  │ POST /api/analyze
+  │ multipart: resume_file + job_description
   ▼
 FastAPI on Render (Docker)
-  app/main.py                 CORS, 6 MB body limit, 20 req/min per-IP rate limit
-  app/routers/analyze.py      /analyze, /recheck, /resume/docx, /suggest-roles
-  app/services/pipeline.py    file checks (type, 5 MB, magic bytes) → orchestration
-    ├─ parser.py              pdfplumber / python-docx → text, plus layout facts (tables, columns, images…)
-    ├─ data_cleaning.py       same normalization used to build the training data
-    ├─ skill_extractor.py     regex over a 436-skill taxonomy + aliases (k8s → kubernetes)
-    ├─ matcher.py             3 features → RobustScaler → Ridge → soft-capped score + breakdown
-    ├─ suggestions.py         rule-based, max 5 (2 slots reserved for structural issues)
-    ├─ role_predictor.py      TF-IDF → calibrated LinearSVC (24 categories) + skill-overlap fallback
-    ├─ resume_sections.py     resume text ↔ editable sections (contact, skills, experience…)
-    ├─ ats_checker.py         rule-based ATS-friendliness report (+ student checklist)
-    ├─ job_decoder.py         must-haves, nice-to-haves, level and years from the posting
-    ├─ learning_plan.py       missing skills → resources + project ideas (app/data/learning_resources.json)
-    ├─ role_gap.py            resume vs a target job role (app/data/target_roles.json)
-    ├─ skills_inventory.py    skills found, grouped and counted
-    └─ resume_docx.py         sections → ATS-friendly .docx
+  │
+  ├── app/main.py
+  │     CORS, request body limit, rate limiting
+  │
+  ├── app/routers/analyze.py
+  │     /analyze, /recheck, /resume/docx, /suggest-roles
+  │
+  └── app/services/pipeline.py
+        File validation and analysis orchestration
+        │
+        ├── parser.py
+        │     PDF/DOCX parsing and layout extraction
+        │
+        ├── data_cleaning.py
+        │     Training-data normalization
+        │
+        ├── skill_extractor.py
+        │     436-skill taxonomy and aliases
+        │
+        ├── matcher.py
+        │     TF-IDF features → Ridge Regression → match score
+        │
+        ├── suggestions.py
+        │     Rule-based improvement suggestions
+        │
+        ├── role_predictor.py
+        │     TF-IDF → calibrated LinearSVC
+        │
+        ├── resume_sections.py
+        │     Editable resume sections
+        │
+        ├── ats_checker.py
+        │     ATS compatibility checks
+        │
+        ├── job_decoder.py
+        │     Job requirements and experience extraction
+        │
+        ├── learning_plan.py
+        │     Missing skills → learning resources
+        │
+        ├── role_gap.py
+        │     Resume vs target-role comparison
+        │
+        ├── skills_inventory.py
+        │     Extracted skills and groups
+        │
+        └── resume_docx.py
+              ATS-friendly Word document generation
+
+Frontend integrations:
+  ├── Supabase Auth and PostgreSQL
+  ├── GitHub public API
+  └── External job APIs
 ```
 
 ### Match score
 
-A Ridge regression on three features, all computable at inference time:
+The match scorer uses Ridge Regression on three features that can all be computed at inference time:
 
-| Feature | Meaning | Effect (from `reports/match_scorer_metrics.json`) |
-| --- | --- | --- |
-| `tfidf_similarity` | TF-IDF cosine similarity of resume and job text | ≈ +1.3 points per +0.01 similarity |
-| `skill_overlap_ratio` | share of the job's skills found in the resume | ≈ +4.8 points per +10 % of required skills |
-| `resume_word_count` | resume length | ≈ +0.7 points per +100 words |
+| Feature | Meaning | Approximate effect |
+|---|---|---|
+| `tfidf_similarity` | TF-IDF cosine similarity between resume and job text | +1.3 points per +0.01 similarity |
+| `skill_overlap_ratio` | Share of job skills found in the resume | +4.8 points per +10% of required skills |
+| `resume_word_count` | Resume length | +0.7 points per +100 words |
 
-Because the model is linear, the API also returns `score_breakdown`: a baseline (≈ 39, the
-score of a median training pair) plus each feature's signed contribution. The UI shows it as
-"Why this score".
+Because the model is linear, the API also returns `score_breakdown`: a baseline plus each feature's signed contribution. The UI displays this as "Why this score".
 
-Raw linear predictions can run past 100 (up to 119 even on training data), so instead of a hard
-clip the score is **soft-capped**: unchanged between 15 and 85, smoothly compressed beyond, never a
-flat 0 or 100, and ranking-preserving. When the cap changes a score, the breakdown includes a
-`range_adjustment` line so it still adds up. Resumes under 150 words or job descriptions under 50
-words get `score_warnings`, because they are far outside the training data.
+Raw linear predictions can exceed 100. Instead of a hard clip, the score is soft-capped: unchanged between 15 and 85, smoothly compressed beyond those values, and ranking-preserving.
+
+When the cap changes a score, the breakdown includes a `range_adjustment` line so the contributions still add up.
+
+Resumes under 150 words or job descriptions under 50 words receive `score_warnings`, because they are outside the typical training-data range.
 
 ### Job categories
 
-A TF-IDF (word + bigram, sublinear TF) → `CalibratedClassifierCV(LinearSVC)` classifier trained on
-2,484 resumes in 24 industry categories (e.g. `INFORMATION-TECHNOLOGY`, `HEALTHCARE`). If the top
-probability is low or the resume is short, predictions are blended with skill overlap against
-hand-curated role profiles (`app/data/role_profiles.json`). The response says `"confidence": "low"`
-when the final top probability is below 50 %: on held-out resumes those predictions were right
-~34 % of the time, versus ~70 % above it.
+A TF-IDF word-and-bigram model with sublinear term frequency feeds a `CalibratedClassifierCV(LinearSVC)` classifier.
+
+It was trained on 2,484 resumes across 24 industry categories.
+
+If the top probability is low or the resume is short, predictions are blended with skill overlap against curated role profiles in `app/data/role_profiles.json`.
+
+The response reports `"confidence": "low"` when the final top probability is below 50%.
 
 ### ATS check
 
-`app/services/ats_checker.py` checks the things that most often break applicant tracking systems
-and weights them into a 0–100 estimate (pass = full weight, warn = half, fail = 0):
+`app/services/ats_checker.py` checks common issues that can affect applicant tracking systems.
+
+The checks are weighted into a 0–100 estimate:
+
+- Pass: full weight.
+- Warn: half weight.
+- Fail: zero weight.
 
 | Area | Checks |
-| --- | --- |
-| Format & layout (uploaded file) | text extracts cleanly, no tables, single column (PDF column detection), no images, no text boxes, contact details not only in the page header/footer, ≤ 2 pages |
-| Content | email, phone, LinkedIn/portfolio link, standard section headings, 250–1,000 words, bullet points, bullets with numbers, bullets starting with action verbs, no emoji/icon characters |
-| Keywords | share of the job's skills found in the resume |
+|---|---|
+| Format and layout | Text extraction, tables, single-column layout, images, text boxes, contact details in headers/footers, page count |
+| Content | Email, phone, LinkedIn/portfolio links, standard section headings, word count, bullets, numbers, action verbs, emoji/icon characters |
+| Keywords | Share of the job's skills found in the resume |
 
-It is a transparent heuristic, not the output of a real ATS. Edited or pasted resumes are exported
-through the plain single-column `.docx` template, so their layout checks count as passes.
+This is a transparent heuristic, not the output of a real ATS.
+
+Edited or pasted resumes are exported through a plain single-column DOCX template, so their layout checks count as passes.
 
 ### Edit & re-check
 
-`resume_sections.py` splits the extracted text into contact details, summary, skills, experience,
-projects, education, certifications and other sections (headings, bullets, wrapped lines and date
-lines are recognised; all 2,484 dataset resumes parse without errors). The UI shows them as an
-editable form; **Re-check** analyzes the edited version (`POST /api/recheck`) and **Download**
-builds an ATS-friendly `.docx` (`POST /api/resume/docx`: one column, standard headings, real Word
-bullet lists, no tables, images or headers).
+`resume_sections.py` splits extracted resume text into:
+
+- Contact details
+- Summary
+- Skills
+- Experience
+- Projects
+- Education
+- Certifications
+- Other sections
+
+Headings, bullets, wrapped lines, and date lines are recognized.
+
+The UI displays the sections in an editable form.
+
+- **Re-check:** analyzes the edited resume using `POST /api/recheck`.
+- **Download:** creates an ATS-friendly DOCX using `POST /api/resume/docx`.
+
+The generated Word document uses one column, standard headings, real Word bullet lists, and no tables, images, or headers.
 
 ### Student features
 
-- **Job decoder** (`job_decoder.py`) reads the posting line by line: skills under headings such as
-  "Requirements" are must-haves, those under "Nice to have" or in lines with "is a plus" /
-  "preferred" are nice-to-haves, and the rest are "also mentioned". It also extracts years of
-  experience, level (entry / mid / senior) and whether a degree is mentioned.
-- **Learning plan** (`learning_plan.py`) uses `app/data/learning_resources.json`: 75 common skills,
-  each with a one-line explanation, free resources from official docs and well-known free
-  platforms, a YouTube video, a project idea, an hours estimate, a three-item "done when you
-  can…" checklist, prerequisites and a roadmap.sh link (details in
-  `scripts/learning_roadmap_data.py`). The plan is a study order: prerequisites the resume doesn't
-  show (JavaScript before React, Linux before Docker) are inserted before the skills that need
-  them. `scripts/build_learning_resources.py` requests every link, checks every video with
-  YouTube's oEmbed endpoint (no API key; it also records the real title and channel), rejects
-  prerequisite loops, and refuses to write the file if anything is broken. Target roles get a
-  roadmap.sh link too (`app/data/role_roadmaps.json`).
-- **Project picker** (`project_picker.py`) chooses one or two projects from 36 student-sized ideas
-  in `app/data/project_ideas.json`. Each missing skill is weighted (must-have 3, nice-to-have 2,
-  mentioned 1; for a target role, by its importance order); a project scores the gaps it closes,
-  plus a little for reusing skills the student has, minus a little for unrelated new skills. The
-  second pick is scored only on gaps the first leaves open, and a project must close gaps worth at
-  least 2 points to be suggested.
-- **Student mode** adds weighted checks to the ATS report: education before experience, 2+
-  projects, an internship or training, grades in the Education section, a GitHub/portfolio link and
-  one-page length. `student_detected` is true for resumes with student wording or a graduation year
-  that hasn't passed.
-- **Bullet coach** runs in the browser (`frontend/src/lib/bulletCoach.js`) so feedback is instant.
+- **Job decoder (`job_decoder.py`):** Reads job postings and identifies must-have skills, nice-to-have skills, experience requirements, job level, and degree requirements.
+- **Learning plan (`learning_plan.py`):** Uses `app/data/learning_resources.json` to recommend resources for 75 common skills. It includes explanations, documentation, free courses, YouTube videos, project ideas, estimated hours, prerequisites, and checklists.
+- **Project picker (`project_picker.py`):** Chooses one or two projects from 36 curated student-sized ideas. Projects are ranked according to the missing skills they cover.
+- **Student mode:** Adds checks for education, projects, internships or training, grades, GitHub/portfolio links, and one-page resume length.
+- **Bullet coach:** Runs in the browser using `frontend/src/lib/bulletCoach.js`.
 
 ### Resume-only mode
 
-An empty job description gives `"mode": "resume_only"`: `match_score` is `null` and the job fields are
-empty, but the ATS check (minus the keyword check), role predictions, `role_gap`, `skills_inventory`
-and a role-based `learning_plan` are returned. Target roles live in `app/data/target_roles.json`
-(built and validated by `scripts/build_target_roles.py`): job-title roles with core skills in
-order of importance, plus a default role for each classifier category. They are separate from the
-classifier's 24 dataset categories because those are broad (the dataset's IT category is mostly
-infrastructure resumes) and would give a software student misleading gaps. The resume strength
-report is computed in the browser (`frontend/src/lib/strength.js`) so it updates while editing.
+An empty job description gives `"mode": "resume_only"`.
+
+In this mode:
+
+- `match_score` is `null`.
+- Job-specific fields are empty.
+- ATS analysis, role predictions, role gaps, and skills inventory are still returned.
+- A role-based learning plan is generated.
+
+Target roles are stored in `app/data/target_roles.json`. They are separate from the classifier's 24 broad dataset categories to provide more useful career recommendations.
+
+The resume strength report is computed in the browser using `frontend/src/lib/strength.js`.
 
 ### Resume generator
 
-"Generate my resume" in the builder (`/build?start=generate`) asks five short steps: contact details,
-target role (and an optional job post), education, projects and internships as quick facts (what you
-built, key technical work, the result with a number, tech used, link), and extra skills. `POST
-/api/resume/generate` (`app/services/resume_generator.py`) writes the resume **without any AI service**:
+The resume generator is available through the builder at `/build?start=generate`.
 
-- **Bullets:** weak openers ("worked on", "helped") are removed, each bullet starts with a verb the bullet
-  coach accepts (chosen from what was built: Trained for models, Automated for scripts, Built for apps),
-  the tech is named with job-matching tech first, the result becomes its own bullet (or "…, used by 1,200
-  students"), and numbers are formatted.
-- **Summary and headline** from the year of study (worked out from the graduation year), degree, target role,
-  the skills the job wants most and the number of projects and internships.
-- **Skills** are only the ones the student listed, grouped into labelled rows. Skills the job or target role
-  asks for that are missing come back as `suggested_skills`, to add only if true.
-- **Tailoring:** projects are ranked by how many must-have / nice-to-have / role skills their tech covers.
-- **One page:** at most 4 projects and 3 bullets per entry; a long result switches to Tech Compact.
-- **`variant`** rotates verbs and sentence patterns ("Try another wording") without changing any fact.
-- **Honest verbs:** "helped build X" becomes "Collaborated to build X", never "Built X"; "participated in"
-  stays "Participated in"; "Led" is used only for lead roles (coordinator, president, head…).
-- **Activities** (clubs, events, hackathons, NSS/NCC, volunteering) become a "Leadership & Activities"
-  section, so a first-year with no projects still gets a real resume.
-- **No projects yet?** `POST /api/resume/project-ideas` picks up to three of the 36 curated project ideas
-  that teach the target role's (or job's) missing skills, with steps and the resume bullet each one earns.
+It collects contact details, target role, education, projects, internships, and additional skills.
 
-The request and response (`app/schemas/generator.py`) are the seam for an optional AI writer later.
+`POST /api/resume/generate` uses `app/services/resume_generator.py` to generate resume content without an external AI service.
+
+Its main rules are:
+
+- Weak bullet openers are replaced with more specific action verbs.
+- Technical skills relevant to the target role are prioritized.
+- Results and measurable achievements are highlighted when supplied.
+- Summary and headline are based on the student's actual information.
+- Only user-provided skills are included as confirmed skills.
+- Missing job skills are returned as `suggested_skills`, not automatically claimed.
+- Projects are ranked according to their relevance to the target role.
+- The generator limits content to help keep the resume concise.
+- Different wording variants change sentence patterns without changing facts.
+- Leadership and activities can be included for students with limited work experience.
+
+`POST /api/resume/project-ideas` recommends up to three curated project ideas for students who do not yet have projects.
 
 ### Resume builder
 
-Templates live in `app/data/resume_templates.json` (mirrored in `frontend/src/lib/resumeTemplates.json`;
-a test checks the copies match). Each one sets a font (Calibri, Cambria, Arial, Times New Roman,
-Georgia or Garamond, previewed with metric-compatible web fonts), sizes, header alignment, heading
-style (rule, double or thick rule, small caps, underline, accent bar or shaded band), accent colour,
-section order (standard, fresher, skills-first, academic) and spacing. The same definition drives
-the browser preview (`ResumeDocument.jsx`), the PDF (the browser's print-to-PDF of a print-only
-copy, so the text stays selectable) and the Word file (`resume_docx.py`: A4, dates right-aligned
-with a tab stop). Every template stays ATS-safe: one column, standard headings, no tables, text
-boxes or photos. Entries have a separate `date`; the parser moves a trailing date ("... |
-Jun 2024 - Present") into it.
+Templates are stored in `app/data/resume_templates.json` and mirrored in `frontend/src/lib/resumeTemplates.json`.
 
-The three **Tech** templates (Tech Classic, Tech Modern, Tech Compact) follow the LaTeX layout
-common in software hiring: a letter-spaced name (`name_case`, `name_spacing`, `name_weight`),
-contact details with icons (`icons`) and links on their own line, ruled headings
-(`heading.rule_color`) and tighter line height (`line_height`). The icons are inline SVG shapes,
-not icon-font glyphs, so the PDF's extracted text stays clean for ATS; the Word file leaves them
-out.
+A test checks that both copies match.
 
-**Links and skill groups** (`app/services/rich_text.py`, mirrored in `frontend/src/lib/richText.js`):
+Each template defines fonts, sizes, header alignment, heading styles, accent colours, section order, and spacing.
 
-- Contact links, e-mail and phone are clickable in the PDF and Word file.
-- Each experience, project or education entry has an optional `link`, shown after the title as
-  the short address (`github.com/you/project`).
-- `[text](url)` anywhere in a bullet, summary, certification or other line becomes a link. Only
-  `http(s)`, `mailto:` and `tel:` links are created; anything else stays plain text. The text the
-  analysis sees shows them as `text (address)`.
-- Skills starting with a label (`Languages: Python`, then `Java`, ...) are shown as labelled rows.
+The same template definition drives:
+
+- Browser preview (`ResumeDocument.jsx`).
+- Browser print-to-PDF.
+- Word document generation (`resume_docx.py`).
+
+Every template is designed to remain ATS-friendly with one column and standard headings.
 
 ### Accounts (Supabase)
 
-The browser talks to Supabase directly with the public anon key; the backend is not involved.
-`supabase/schema.sql` creates three tables (`resumes`, `learning_progress`, `applications`) with
-row-level security so every user can only read and change their own rows, plus a
-`delete_my_account()` function behind "Delete account" (the rows go with the user via `on delete
-cascade`). Set it up once:
+FitLens uses Supabase Auth for Google and email authentication and Supabase PostgreSQL for account-related data.
 
-1. Supabase → SQL Editor → paste `supabase/schema.sql` → Run.
-2. Authentication → URL Configuration: Site URL `https://resumefitlens.vercel.app`; redirect URLs
-   `https://resumefitlens.vercel.app/**` and `http://localhost:5173/**`.
-3. Authentication → Sign In / Providers → Google: the client ID and secret from Google Cloud
-   (redirect URI `https://<project>.supabase.co/auth/v1/callback`).
-4. Vercel → Environment Variables: `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`, then redeploy.
-   Locally, put them in `frontend/.env.local` (see `frontend/.env.example`). Without them, sign-in
-   is hidden.
+The frontend connects to Supabase using the public publishable/anon key. Never expose the service-role key in frontend code.
+
+The database schema is stored in `supabase/schema.sql`.
+
+It creates the supported application tables, including:
+
+- `resumes`
+- `learning_progress`
+- `applications`
+
+Row Level Security (RLS) policies restrict users to their own records.
+
+The schema also defines a `delete_my_account()` function for account deletion.
+
+#### Supabase project configuration
+
+The current Supabase project URL is:
+
+```text
+https://trjqihichgkrnhtzlmlq.supabase.co
+```
+
+The Google OAuth callback URL is:
+
+```text
+https://trjqihichgkrnhtzlmlq.supabase.co/auth/v1/callback
+```
+
+To configure authentication:
+
+1. Open your Supabase project.
+2. Navigate to Authentication → URL Configuration.
+3. Set the production Site URL:
+
+   ```text
+   https://ai-resume-analyzer-plus.vercel.app
+   ```
+
+4. Add the production redirect URL:
+
+   ```text
+   https://ai-resume-analyzer-plus.vercel.app/**
+   ```
+
+5. Add the local development redirect URL:
+
+   ```text
+   http://localhost:5173/**
+   ```
+
+6. Navigate to Authentication → Sign In / Providers → Google.
+7. Enable Google authentication and configure the Google OAuth Client ID and Client Secret from the same Google Cloud OAuth Web application.
+8. In Google Cloud Console, add this authorized redirect URI:
+
+   ```text
+   https://trjqihichgkrnhtzlmlq.supabase.co/auth/v1/callback
+   ```
+
+9. Add the production frontend origin to the Google OAuth authorized JavaScript origins:
+
+   ```text
+   https://ai-resume-analyzer-plus.vercel.app
+   ```
+
+10. Save the configuration.
+
+#### Frontend environment variables
+
+Set these in Vercel → Project → Settings → Environment Variables:
+
+```env
+VITE_SUPABASE_URL=https://trjqihichgkrnhtzlmlq.supabase.co
+VITE_SUPABASE_ANON_KEY=YOUR_SUPABASE_PUBLISHABLE_OR_ANON_KEY
+```
+
+For local development, place the same variable names in `frontend/.env.local`.
+
+Never commit `.env.local`, OAuth client secrets, or service-role keys.
+
+After changing production environment variables, redeploy the frontend.
 
 ### GitHub proof check
 
-The browser reads the student's public profile and repositories straight from GitHub's API (no
-sign-in or key; each visitor has GitHub's free 60 requests an hour, instead of every user sharing
-the server's), then `POST /api/github-check` (`app/services/github_check.py`) compares them with
-the resume. A repository shows a skill through its language (`Jupyter Notebook` → Python,
-`Dockerfile` → Docker), topics (`machine-learning`, `nodejs`) and name/description; forks don't
-count. Only technical groups (languages, web, data & AI, databases, cloud & DevOps) are judged.
-The report lists skills backed by a repo, skills with no public proof, skills the repos show that
-the resume leaves out (one click adds them to the editor), and a profile checklist: own projects,
-recent activity, descriptions, topics, live demos, a profile README, name and bio, and whether the
-resume links to the profile.
+The browser reads the student's public GitHub profile and repositories using GitHub's public API.
+
+`POST /api/github-check` (`app/services/github_check.py`) compares repository information with resume skills.
+
+Repository evidence can include:
+
+- Programming languages.
+- Repository topics.
+- Repository names and descriptions.
+- Technology-related project information.
+
+Forks do not count as original project evidence.
+
+The report identifies:
+
+- Skills supported by public repositories.
+- Skills without public repository evidence.
+- Skills shown by repositories but missing from the resume.
+- Suggested GitHub profile improvements.
 
 ### Live job search
 
-`POST /api/jobs` (`app/services/job_search.py`) fetches current postings and scores the resume
-against each one with the same match model, so they can be sorted by fit. Only the search words,
-country and job type are sent to the job sites; the resume stays on the server.
+`POST /api/jobs` (`app/services/job_search.py`) fetches current postings and scores them against the resume using the same match model.
 
-- **[Himalayas](https://himalayas.app/api)** — remote jobs, including India-only and internship
-  roles. Free, no key. Its data refreshes daily, so results are cached for 6 hours.
-- **[Adzuna](https://developer.adzuna.com)** — on-site jobs in India and six other countries.
-  Optional: set `ADZUNA_APP_ID` and `ADZUNA_APP_KEY` (free developer key). Adzuna returns only a
-  snippet of each posting, so those scores are rougher (the card says so). Cached for 1 hour.
+Supported sources include:
 
-Both ask that listings link back to them and name them as the source, which every card does.
-Results are cached in memory by (source, query, country, type), so popular searches rarely reach
-the job sites. Remotive and Arbeitnow were considered and left out: Remotive's free API now
-returns only a handful of jobs, and Arbeitnow is almost all Germany. Skill extraction is cached by
-text, so scoring 20 postings takes about a second.
+- **Himalayas:** Remote job listings.
+- **Adzuna:** Job listings in supported countries.
 
-The response also has `skill_demand`: the 12 skills mentioned most across the postings found (at
-least 3 postings, and a skill must appear in 2), with each one's share and whether the resume shows
-it. Soft skills and generic words from the extractor's catch-all domain group ("reporting",
-"research") are left out unless a target role lists them, so "accounting" or "SEO" still count.
+Adzuna requires optional developer credentials:
+
+```env
+ADZUNA_APP_ID=YOUR_ADZUNA_APP_ID
+ADZUNA_APP_KEY=YOUR_ADZUNA_APP_KEY
+```
+
+These must be configured on the backend, not exposed in the frontend.
+
+Job search results include fit scores, matched skills, missing skills, application URLs, and source information.
+
+Results are cached to reduce unnecessary external API requests.
+
+---
 
 ## Data
 
 | File | Rows | Used for |
-| --- | --- | --- |
-| `data/raw/Resume.csv.gz` | 2,484 resumes, 24 categories | role classifier |
-| `data/raw/job_resume_fit.csv.gz` | 2,385 resume–job pairs, **23** unique job descriptions | match scorer (target: `ai_match_score`) |
+|---|---:|---|
+| `data/raw/Resume.csv.gz` | 2,484 resumes, 24 categories | Role classifier |
+| `data/raw/job_resume_fit.csv.gz` | 2,385 resume-job pairs, 23 unique job descriptions | Match scorer |
 
-Data files are stored gzipped (pandas reads `.csv.gz` directly). `data/processed/` is generated
-by `scripts/build_processed_data.py`.
+Data files are stored in compressed CSV format. Pandas can read `.csv.gz` files directly.
+
+`data/processed/` contains generated datasets created by `scripts/build_processed_data.py`.
+
+---
 
 ## Model performance
 
-All numbers below are produced by the training scripts and stored in `reports/*.json`;
-`reports/evaluation_summary.md` summarizes them.
+The following metrics are produced by the training scripts and stored in `reports/`.
 
-**Match scorer** — GroupKFold (k = 5) grouped by job description, so no job description is in both
-training and test folds:
+### Match scorer
 
-| Model | R² | RMSE (0–100) | MAE |
-| --- | --- | --- | --- |
-| **Ridge (production)** | **0.377 ± 0.156** | **17.71 ± 2.14** | 14.48 ± 2.11 |
-| Random forest | 0.349 ± 0.174 | 18.13 ± 2.50 | 14.66 ± 2.69 |
-| Gradient boosting | 0.280 ± 0.127 | 19.29 ± 3.18 | 15.52 ± 3.20 |
+Evaluation uses GroupKFold with five folds grouped by job description. This prevents the same job description from appearing in both training and test folds.
 
-Predictions are soft-capped exactly as in production. (The original model scored 0.360; the soft cap
-and the larger skill taxonomy raised it to 0.377.)
+| Model | R² | RMSE | MAE |
+|---|---:|---:|---:|
+| **Ridge (production)** | **0.377 ± 0.156** | **17.71 ± 2.14** | **14.48 ± 2.11** |
+| Random Forest | 0.349 ± 0.174 | 18.13 ± 2.50 | 14.66 ± 2.69 |
+| Gradient Boosting | 0.280 ± 0.127 | 19.29 ± 3.18 | 15.52 ± 3.20 |
 
-The dataset never pairs a resume with a job from another category, so a separate check scores
-300 resumes against a random other-category job: those pairs average **28** vs **45** for
-own-category pairs, and the own-category pair scores higher **86 %** of the time.
+Predictions are soft-capped using the same process as production.
 
-**Role classifier** — stratified 80/20 split (497 test resumes):
+### Role classifier
 
-Most dataset resumes open with an ALL-CAPS title that repeats the label ("SALES ASSOCIATE …"),
-which lets a model read the answer. Real resumes usually open with a name, so the honest
-numbers are the ones with that title removed:
+The classifier uses a stratified 80/20 split with 497 test resumes.
 
 | Test set | Top-1 | Top-3 | Macro F1 |
-| --- | --- | --- | --- |
-| Full resume, title kept (optimistic) | 73.2 % | 92.2 % | 0.688 |
-| **Full resume, title removed** | **70.0 %** | **89.5 %** | **0.660** |
-| 250-word snippet | 62.8 % | 80.3 % | 0.592 |
-| 120-word snippet | 52.9 % | 70.4 % | 0.490 |
+|---|---:|---:|---:|
+| Full resume, title kept | 73.2% | 92.2% | 0.688 |
+| **Full resume, title removed** | **70.0%** | **89.5%** | **0.660** |
+| 250-word snippet | 62.8% | 80.3% | 0.592 |
+| 120-word snippet | 52.9% | 70.4% | 0.490 |
 
-(The original model scored 73.8 % with titles but 67.6 % without; sublinear TF and consistent text
-cleaning raised the title-removed figure to 70.0 %.)
+The title-removed result is more representative of real resumes, where the opening line usually contains a person's name rather than a job-category label.
 
-**Short resumes and the fallback.** On dataset resumes the skill-overlap fallback costs 1–2 points.
-On 19 hand-written short, student-style resumes (`scripts/synthetic_resumes.py`) the raw model gets
-**12/19** right and the fallback **19/19**, so it is kept for resumes under 100 words or with a top
-probability under 25 %. Those thresholds were tuned on out-of-fold training predictions.
+### Short resumes and fallback
+
+The skill-overlap fallback is used for short resumes or predictions with very low confidence.
+
+On 19 hand-written student-style resumes, the raw model classified 12 correctly, while the fallback classified all 19 correctly.
+
+These results come from a small synthetic test set and should not be treated as a guarantee of real-world accuracy.
+
+---
 
 ## Limitations
 
-- **Small, AI-labelled match data.** Only 23 job descriptions, and the target score was produced
-  by an AI model rather than recruiters. About half of the score variance is explained by *which
-  job* a resume was scored against, which no model can know for a new job; R² ≈ 0.37 is a
-  realistic ceiling here.
-- **Unrelated jobs can still score in the high 30s.** In the mismatched-pair check, 10 % of
-  other-category pairs scored above ~40.
-- **Wording over meaning.** TF-IDF similarity is the strongest feature, so paraphrased experience
-  ("built REST services" vs "REST API") is partly missed. Skill aliases reduce this. Sentence
-  embeddings would help more but were left out to fit Render's 512 MB free tier.
-- **Industry categories, not job titles.** The classifier knows 24 broad categories, some of which
-  overlap: `ADVOCATE` contains many patient-advocate resumes. The 206-word nursing resume that the
-  first model confidently called `ADVOCATE` (48.7 %) is now `HEALTHCARE`, but only 38 % vs 35 %,
-  so it is reported as low confidence. The flag catches unclear predictions, not a model that is
-  confidently wrong.
-- **The dataset resumes are long professional ones** (median ≈ 760 words), so short student resumes
-  rely more on the skill-overlap fallback.
-- **Text-based files only.** Scanned or image-only PDFs have no text layer; the API explains this
-  and asks for a text-based PDF or DOCX (OCR would not fit the free tier).
+- **Small, AI-labelled match dataset:** The match scorer uses 23 unique job descriptions. Target scores were generated by an AI model rather than recruiters.
+- **Limited semantic understanding:** TF-IDF similarity may miss paraphrased experience and equivalent technical terminology.
+- **Broad job categories:** The role classifier predicts 24 industry categories, not every individual job title.
+- **Short student resumes:** The original dataset contains longer professional resumes, so short student resumes rely more on fallback logic.
+- **Text-based files:** Scanned or image-only PDFs without a text layer may not be parsed correctly.
+- **ATS score is an estimate:** The ATS checker uses transparent rules and heuristics, not a real employer's ATS software.
+- **Job availability:** External job listings may be outdated, unavailable, or incomplete.
+
+---
 
 ## Run locally
 
-Requires Python 3.14 (the version the pinned dependencies and models were built with) and Node 20+.
+Requirements:
+
+- Python 3.14.
+- Node.js 20 or later.
+- npm.
+- Git.
+
+### Backend
+
+From the project root:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements-dev.txt
+uvicorn app.main:app --reload
+```
+
+Backend:
+
+```text
+http://127.0.0.1:8000
+```
+
+API documentation, if enabled:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+### Frontend
+
+Open another terminal:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Frontend:
+
+```text
+http://localhost:5173
+```
+
+### Checks
+
+Backend:
 
 ```bash
-python -m venv .venv
-.venv\Scripts\activate          # Windows; use `source .venv/bin/activate` on macOS/Linux
-pip install -r requirements-dev.txt
-uvicorn app.main:app --reload   # http://127.0.0.1:8000  (set ENABLE_DOCS=true for /docs)
+ruff check .
+ruff format --check .
+pytest
 ```
+
+Frontend:
 
 ```bash
 cd frontend
-npm install
-npm run dev                     # http://localhost:5173, proxies /api to :8000
+npm run lint
+npm run build
 ```
 
-Checks (the same ones CI runs on every push and pull request):
+---
 
-```bash
-ruff check . && ruff format --check . && pytest
+## API
+
+The main API endpoints include:
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| POST | `/api/analyze` | Analyze an uploaded resume against a job description |
+| POST | `/api/recheck` | Re-analyze edited resume sections |
+| POST | `/api/resume/parse` | Parse a resume into editable sections |
+| POST | `/api/resume/docx` | Generate an ATS-friendly Word document |
+| POST | `/api/resume/generate` | Generate a resume from user-provided information |
+| POST | `/api/resume/project-ideas` | Recommend portfolio projects |
+| POST | `/api/role-gap` | Compare resume skills with a target role |
+| POST | `/api/learn` | Generate a learning roadmap |
+| GET | `/api/learn/catalog` | List learning skills and career paths |
+| POST | `/api/jobs` | Search for jobs and internships |
+| GET | `/api/jobs/options` | Get supported job-search options |
+| POST | `/api/github-check` | Compare resume skills with public GitHub repositories |
+| POST | `/api/suggest-roles` | Suggest suitable job categories |
+| GET | `/` | Backend health check |
+
+### Analyze request
+
+`POST /api/analyze`
+
+Accepts multipart form data:
+
+- `resume_file`: PDF or DOCX file, maximum 5 MB.
+- `job_description`: Optional job description.
+- `student_mode`: Optional student checklist setting.
+
+It can also accept JSON:
+
+```json
+{
+  "resume_text": "Resume text here",
+  "job_text": "Job description here"
+}
 ```
 
-```bash
-cd frontend && npm run lint && npm run build
+The response can include:
+
+- `match_score`
+- `score_breakdown`
+- `features`
+- `matched_skills`
+- `missing_skills`
+- `score_warnings`
+- `suggestions`
+- `suggested_roles`
+- `confidence`
+- `resume`
+- `ats`
+- `job_insights`
+- `learning_plan`
+- `project_picks`
+- `student_mode`
+- `student_detected`
+
+### Re-check request
+
+`POST /api/recheck`
+
+```json
+{
+  "resume": {
+    "summary": "Resume summary",
+    "skills": ["Python", "SQL"]
+  },
+  "job_description": "Job description here",
+  "student_mode": false
+}
 ```
 
-### API
+### Role-gap request
 
-`POST /api/analyze` — multipart `resume_file` (PDF/DOCX, ≤ 5 MB) + `job_description`, or JSON
-`{"resume_text": "...", "job_text": "..."}`. Returns `match_score`, `score_breakdown`, `features`,
-`matched_skills`, `missing_skills` (sorted), `score_warnings`, `suggestions`, `suggested_roles`,
-`confidence`, `resume` (editable sections), `ats` (score, verdict, checks), `job_insights`,
-`learning_plan`, `project_picks`, `student_mode` and `student_detected`. Add `student_mode=true` (form field or
-JSON) for the student checklist.
+`POST /api/role-gap`
 
-`POST /api/recheck` — JSON `{"resume": {...sections}, "job_description": "...", "student_mode": false}`. Same response as
-`/api/analyze`, for the edited resume.
+```json
+{
+  "resume": {
+    "skills": ["Python", "SQL"]
+  },
+  "target_role": "Data Analyst"
+}
+```
 
-`POST /api/resume/docx` — JSON resume sections; returns an ATS-friendly `.docx` download.
+### Job search request
 
-`POST /api/role-gap` — JSON `{"resume": {...}, "target_role": "Data Analyst"}`; returns `role_gap`, a
-role-based `learning_plan` and `project_picks` without re-running the models.
+`POST /api/jobs`
 
-`job_description` is optional on `/api/analyze` and `/api/recheck`; both also accept `target_role`.
+```json
+{
+  "resume": {
+    "skills": ["Python", "SQL"]
+  },
+  "query": "Data Analyst",
+  "country": "IN",
+  "kind": "internship"
+}
+```
 
-`POST /api/jobs` — JSON `{"resume": {...}, "query": "data analyst", "country": "IN", "kind": "internship"}`
-(`kind`: `all`, `internship` or `entry`; `country`: a code from `/api/jobs/options` or `ANY`). Returns
-`jobs` (each with `fit_score`, `matched_skills`, `missing_skills`, `url`, `source`), sorted by fit,
-the status of each `sources` entry, and `skill_demand`.
+### Learning roadmap request
 
-`POST /api/github-check` — JSON `{"resume": {...}, "profile": {...}, "repos": [...]}` with the
-public GitHub profile and up to 100 repositories as GitHub's API returns them. Returns `proven`,
-`unproven`, `hidden`, `checks` and `stats`.
+`POST /api/learn`
 
-`GET /api/jobs/options` — countries for the job search and whether on-site jobs are enabled.
+```json
+{
+  "skills": ["React", "Docker"],
+  "known": ["HTML"]
+}
+```
 
-`POST /api/resume/parse` — multipart `resume_file`; returns the resume split into editable sections.
+### GitHub proof request
 
-`POST /api/resume/docx?template=campus&accent=%231d4ed8` — both query parameters optional.
+`POST /api/github-check`
 
-`POST /api/learn` — JSON `{"skills": ["react", "docker"], "known": ["html"]}` (1–8 skills); returns
-`learning_plan` (goals in your order, missing prerequisites first), `project_picks` and `unknown`
-(skills without a curated roadmap). `GET /api/learn/catalog` lists the skills and career paths.
+Accepts the public GitHub profile and repository information.
 
-`POST /api/jobs` also works without `resume`: postings are then unscored and list the skills asked.
+### API errors
 
-`POST /api/suggest-roles` — a resume file or `resume_text`, optional `top_n` (1–24).
+Errors are returned as JSON:
 
-`GET /` (or `HEAD /`) — health check.
+```json
+{
+  "detail": "Error description"
+}
+```
 
-Errors are JSON `{"detail": "..."}`: 400 invalid file or input, 413 body over 6 MB, 422 validation,
-429 more than 20 requests per minute from one IP (with `Retry-After`), 503 model files missing.
+Possible status codes include:
+
+- `400`: Invalid file or input.
+- `413`: Request body exceeds the configured limit.
+- `422`: Validation error.
+- `429`: Rate limit exceeded.
+- `503`: Required model files are missing.
+
+For the exact implementation and response schemas, refer to `app/routers/` and `app/schemas/`.
+
+---
 
 ## Retraining the models
 
+The training scripts are located in `scripts/`.
+
 ```bash
-python scripts/build_processed_data.py     # raw → data/processed/*.csv.gz
-python scripts/build_skills_taxonomy.py    # → app/data/skills_list.json
-python -m app.ml.features                  # → data/processed/features.csv + models/tfidf_vectorizer.joblib
-python scripts/train_match_scorer.py       # → match_scorer + feature_scaler, reports/match_scorer_metrics.json
-python scripts/train_role_classifier.py    # → role_classifier + role_vectorizer, reports/role_classifier_metrics.json
-python scripts/evaluate_pipeline.py        # → reports/evaluation_summary.md
-python scripts/build_learning_resources.py # checks every link and video → app/data/learning_resources.json
-python scripts/build_target_roles.py       # validates job-title roles → app/data/target_roles.json
+python scripts/build_processed_data.py
+python scripts/build_skills_taxonomy.py
+python -m app.ml.features
+python scripts/train_match_scorer.py
+python scripts/train_role_classifier.py
+python scripts/evaluate_pipeline.py
+python scripts/build_learning_resources.py
+python scripts/build_target_roles.py
 ```
 
-`requirements.txt` pins scikit-learn to the version that pickled `models/*.joblib`. If you upgrade
-scikit-learn, rerun the steps above before deploying.
+The generated files are stored in `data/processed/`, `app/data/`, `models/`, and `reports/`.
+
+`requirements.txt` pins the scikit-learn version used to serialize the models. If you upgrade scikit-learn, retrain the models before deploying.
+
+---
 
 ## Deployment
 
-**Backend (Render).** The service `AI-RESUME-ANALYZER` (<https://ai-resume-analyzer-xb45.onrender.com>,
-region Virginia) builds the `Dockerfile` (Python 3.14-slim, non-root user, only `app/` and
-`models/` copied) and redeploys on every push to `main`. The container listens on `$PORT`, which
-Render sets. The service was created in the dashboard, so its settings live there; `render.yaml`
-mirrors them for recreating it as a Blueprint. Environment variables (set in the dashboard):
+### Frontend — Vercel
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `CORS_ORIGINS` | localhost dev origins | comma-separated origins allowed to call the API; must include `https://resumefitlens.vercel.app` |
-| `ENABLE_DOCS` | `false` | expose `/docs` and `/openapi.json` |
-| `RATE_LIMIT_PER_MINUTE` | `20` | POST requests (analyze, re-check, download, job search) per client IP per minute (`0` disables) |
-| `LOG_LEVEL` | `INFO` | log level |
-| `ADZUNA_APP_ID`, `ADZUNA_APP_KEY` | unset | free [Adzuna](https://developer.adzuna.com) key; switches on on-site jobs in the job search |
+**Production URL:**
 
-On the free plan the service sleeps after ~15 minutes idle. The `Keep backend awake` GitHub Actions
-workflow pings the health check every 10 minutes from 07:30 to 00:30 IST (~510 of the 750 free
-hours a month), so daytime visitors don't wait. Outside those hours the first request can take up
-to a minute; models load at startup and the frontend shows a "waking up" notice and waits up to
-120 s. GitHub pauses scheduled workflows after 60 days without repository activity; re-enable it
-from the Actions tab if needed.
+https://ai-resume-analyzer-plus.vercel.app/
 
-**Frontend (Vercel).** The Vercel project's Root Directory is `frontend`, so `frontend/vercel.json`
-is the active config: Vite build to `dist/` and SPA fallback to `index.html`. The Vercel
-environment variable `VITE_API_BASE_URL=https://ai-resume-analyzer-xb45.onrender.com` makes the
-browser call the backend directly (hence `CORS_ORIGINS` above). If that variable is removed,
-requests go to `/api/*` on the Vercel domain and the rewrite in `vercel.json` forwards them to the
-same backend.
+The frontend is built using React and Vite and deployed on Vercel.
+
+Important configuration:
+
+- Root Directory: `frontend`
+- Build command: `npm run build`
+- Output directory: `dist`
+
+Frontend environment variables:
+
+```env
+VITE_SUPABASE_URL=https://trjqihichgkrnhtzlmlq.supabase.co
+VITE_SUPABASE_ANON_KEY=YOUR_SUPABASE_PUBLISHABLE_OR_ANON_KEY
+```
+
+If the frontend is configured to call the backend directly, configure:
+
+```env
+VITE_API_BASE_URL=https://ai-resume-analyzer-api-9709.onrender.com
+```
+
+If the project uses the Vercel `/api` rewrite instead, keep the API base URL configuration consistent with `frontend/vercel.json`.
+
+After changing environment variables, redeploy the frontend.
+
+### Backend — Render
+
+**Production API URL:**
+
+https://ai-resume-analyzer-api-9709.onrender.com/
+
+The backend uses FastAPI and Docker and is deployed on Render.
+
+The root health-check endpoint is:
+
+```text
+https://ai-resume-analyzer-api-9709.onrender.com/
+```
+
+Expected response:
+
+```json
+{
+  "message": "Welcome to Resume Analyzer API",
+  "status": "active"
+}
+```
+
+Backend environment variables should be configured in the Render dashboard.
+
+| Variable | Purpose |
+|---|---|
+| `CORS_ORIGINS` | Allowed frontend origins |
+| `ENABLE_DOCS` | Enables or disables API documentation |
+| `RATE_LIMIT_PER_MINUTE` | Configures API rate limiting |
+| `LOG_LEVEL` | Backend logging level |
+| `ADZUNA_APP_ID` | Optional Adzuna application ID |
+| `ADZUNA_APP_KEY` | Optional Adzuna application key |
+
+For production, ensure `CORS_ORIGINS` includes:
+
+```text
+https://ai-resume-analyzer-plus.vercel.app
+```
+
+Do not store private API credentials in frontend environment variables.
+
+**Note:** Render free services may sleep after inactivity. The first request after sleeping can take longer while the service starts.
+
+---
 
 ## Project structure
 
 ```text
-app/                FastAPI app (main.py, rate_limit.py), routers, schemas (analysis, resume, insights, jobs, github), services, ml/, data/*.json
-data/raw/           source datasets (.csv.gz)
-data/processed/     cleaned datasets and features.csv (generated)
-models/             serialized models (~5.2 MB total)
-scripts/            data processing, training and evaluation
-reports/            metrics JSON written by training + evaluation_summary.md
-notebooks/          exploratory data analysis
-tests/              pytest suite
-frontend/           React + Vite app (see frontend/README.md)
-supabase/schema.sql tables and row-level security for optional accounts
-.github/workflows/  CI (lint + tests + build) and the keep-awake ping
+AI-Resume-Analyzer/
+│
+├── app/
+│   ├── routers/           API routes
+│   ├── schemas/           Request and response schemas
+│   ├── services/          Resume analysis and application services
+│   ├── ml/                Machine learning features
+│   └── data/              Skills, roles and learning resources
+│
+├── data/
+│   ├── raw/               Original datasets
+│   └── processed/         Processed datasets
+│
+├── models/                Trained ML models
+├── scripts/               Data processing and training scripts
+├── reports/               Model evaluation reports
+├── notebooks/             Exploratory data analysis
+├── tests/                 Backend automated tests
+│
+├── frontend/
+│   ├── public/
+│   └── src/
+│
+├── supabase/
+│   └── schema.sql
+│
+├── .github/
+│   └── workflows/         CI workflows
+│
+├── Dockerfile
+├── requirements.txt
+├── requirements-dev.txt
+└── README.md
 ```
+
+---
+
+## Repository and deployment links
+
+| Resource | Link |
+|---|---|
+| GitHub Repository | https://github.com/Suri-618/AI-Resume-Analyzer |
+| Live Frontend | https://ai-resume-analyzer-plus.vercel.app/ |
+| Backend API | https://ai-resume-analyzer-api-9709.onrender.com/ |
+| Supabase Project | https://supabase.com/dashboard/project/trjqihichgkrnhtzlmlq |
+
+---
+
+**FitLens — Understand your resume. Improve your skills. Move closer to your dream career.**
