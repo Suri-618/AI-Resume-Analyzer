@@ -1,122 +1,483 @@
-# FitLens frontend
+# FitLens Frontend
 
-React 19 + Vite + Tailwind CSS 4 single-page app for the Resume Analyzer. Upload a resume
-(PDF/DOCX), with or without a job description (sample postings included), to get a match score with a per-factor breakdown, a decoded view
-of the job, an ATS check (with a student / fresher checklist), a skill-gap learning plan, and an
-editor with a live bullet coach to fix the resume, re-check it and download an ATS-friendly `.docx`,
-and live jobs and internships with a fit score on each.
+React 19 + Vite + Tailwind CSS 4 single-page application for **FitLens — AI Resume Analyzer**.
 
-Live: <https://resumefitlens.vercel.app>
+Upload a resume (PDF/DOCX), with or without a job description, to get:
+
+- Resume-to-job match score with a per-factor breakdown.
+- Job description analysis and skill requirements.
+- ATS compatibility check with a student/fresher checklist.
+- Skill-gap analysis and personalized learning roadmap.
+- Resume editor with a live bullet coach.
+- ATS-friendly DOCX resume download.
+- Live jobs and internships with individual fit scores.
+- GitHub profile and repository skill verification.
+- Resume builder with 15 professional templates.
+- Optional accounts, saved resumes, learning progress, and application tracking.
+
+**Live application:** https://ai-resume-analyzer-plus.vercel.app/  
+**GitHub repository:** https://github.com/Suri-618/AI-Resume-Analyzer
+
+---
 
 ## Design
 
-A "paper & highlighter" theme: warm paper surfaces, ink text, one ink-blue accent, highlighter
-yellow for matches and a red pen for gaps. Fraunces for headings, Inter for text, JetBrains Mono
-for numbers. Light and dark themes follow the system setting until the user picks one (saved in
-`localStorage`).
+FitLens uses a **paper & highlighter** design theme:
 
-Motion (Framer Motion) is small and purposeful: matched skills get a highlighter swipe, missing
-ones a hand-drawn red underline, the ATS score lands like a rubber stamp, the active tab is a
-highlighter stroke that springs between tabs, and scores count up. Everything respects the OS
-"reduce motion" setting (`MotionConfig reducedMotion="user"`).
+- Warm paper surfaces.
+- Ink-colored text.
+- Ink-blue primary accent.
+- Highlighter yellow for matched skills.
+- Red pen styling for missing skills and improvement areas.
+- Fraunces for headings.
+- Inter for body text.
+- JetBrains Mono for numbers and technical labels.
+
+Light and dark themes follow the system setting until the user selects a theme. The selected preference is saved in `localStorage`.
+
+### Motion and interactions
+
+Framer Motion provides small, purposeful animations:
+
+- Matched skills receive a highlighter swipe.
+- Missing skills receive a hand-drawn red underline.
+- ATS scores animate like a rubber stamp.
+- Active tabs use a spring-animated highlighter stroke.
+- Scores count up when displayed.
+- Page transitions and interactive elements use subtle animations.
+
+All animations respect the operating system's reduced-motion preference through:
+
+```jsx
+<MotionConfig reducedMotion="user">
+```
+
+---
 
 ## Run locally
 
-```bash
+### Prerequisites
+
+- Node.js 20 or later.
+- npm.
+- Python 3.14 for the backend.
+- Git.
+
+### 1. Install frontend dependencies
+
+From the repository root:
+
+```powershell
+cd frontend
 npm install
-npm run dev        # http://localhost:5173
 ```
 
-The dev server proxies `/api/*` to `http://127.0.0.1:8000` (see `vite.config.js`), so start the
-backend from the repository root first:
+### 2. Start the backend
 
-```bash
+Open another terminal from the repository root:
+
+```powershell
+.venv\Scripts\activate
 uvicorn app.main:app --reload
 ```
 
-Other scripts: `npm run build` (production bundle in `dist/`), `npm run preview` (serve the build),
-`npm run lint` (oxlint).
+Backend:
+
+```text
+http://127.0.0.1:8000
+```
+
+### 3. Start the frontend
+
+From the `frontend` directory:
+
+```powershell
+npm run dev
+```
+
+Frontend:
+
+```text
+http://localhost:5173
+```
+
+The Vite development server proxies `/api/*` requests to `http://127.0.0.1:8000` through `vite.config.js`.
+
+### Available scripts
+
+| Command | Description |
+|---|---|
+| `npm install` | Install dependencies |
+| `npm run dev` | Start the development server |
+| `npm run build` | Create the production build in `dist/` |
+| `npm run preview` | Preview the production build locally |
+| `npm run lint` | Run Oxlint |
+
+---
+
+## Environment variables
+
+The frontend uses environment variables for API communication and optional Supabase authentication.
+
+Create a `.env.local` file inside the `frontend` directory.
+
+```env
+# Backend API
+VITE_API_BASE_URL=http://127.0.0.1:8000
+
+# Supabase authentication
+VITE_SUPABASE_URL=YOUR_SUPABASE_PROJECT_URL
+VITE_SUPABASE_ANON_KEY=YOUR_SUPABASE_PUBLISHABLE_OR_ANON_KEY
+```
+
+For local development, the API base URL can also be left unset because Vite proxies `/api/*` requests to the local backend.
+
+### Production configuration
+
+The production frontend is deployed on Vercel.
+
+**Frontend URL:**
+
+```text
+https://ai-resume-analyzer-plus.vercel.app/
+```
+
+**Backend URL:**
+
+```text
+https://ai-resume-analyzer-api-9709.onrender.com/
+```
+
+Configure the following environment variables in:
+
+Vercel → Project → Settings → Environment Variables
+
+```env
+VITE_API_BASE_URL=https://ai-resume-analyzer-api-9709.onrender.com
+VITE_SUPABASE_URL=https://trjqihichgkrnhtzlmlq.supabase.co
+VITE_SUPABASE_ANON_KEY=YOUR_SUPABASE_PUBLISHABLE_OR_ANON_KEY
+```
+
+After modifying environment variables, redeploy the Vercel application.
+
+**Security notes:**
+
+- Never expose Supabase service-role keys in frontend code.
+- Never commit `.env.local` or other files containing private credentials.
+- The Supabase publishable/anon key is intended for frontend use with correctly configured database security policies.
+- Google OAuth Client Secrets must remain in Supabase provider configuration, not in frontend environment variables.
+
+---
 
 ## How it talks to the API
 
-`src/lib/api.js` calls `${VITE_API_BASE_URL}/api/...` with a 120 s timeout (the free Render
-instance can take close to a minute to wake up):
+The API wrapper is located at:
 
-| Call | Endpoint |
-| --- | --- |
-| Analyze an upload | `POST /api/analyze` (multipart `resume_file`, `job_description`) |
-| Re-check the edited resume | `POST /api/recheck` (JSON) |
-| Change the target role | `POST /api/role-gap` (JSON) |
-| Download the edited resume | `POST /api/resume/docx` (JSON → `.docx`) |
-| Find jobs and internships | `POST /api/jobs`, `GET /api/jobs/options` |
-| GitHub proof check | `GET https://api.github.com/users/…` (public data, from the browser), then `POST /api/github-check` |
+```text
+src/lib/api.js
+```
 
-| Environment | `VITE_API_BASE_URL` | Requests go to |
-| --- | --- | --- |
-| `npm run dev` | unset | `/api/*` → Vite proxy → `http://127.0.0.1:8000` |
-| Vercel (production) | `https://ai-resume-analyzer-xb45.onrender.com` (Vercel env var) | the Render backend directly; it allows this origin via `CORS_ORIGINS` |
-| Vercel without the env var | unset | `/api/*` → `vercel.json` rewrite → the same Render backend |
+It calls the backend using the configured `VITE_API_BASE_URL` and a 120-second timeout. The longer timeout allows the Render free service to start after inactivity.
 
-Optional accounts use Supabase directly from the browser: set `VITE_SUPABASE_URL` and
-`VITE_SUPABASE_ANON_KEY` (Vercel env vars, or `.env.local` from `.env.example`). Without them the
-Sign in button is hidden and everything else works.
+| Feature | Endpoint | Description |
+|---|---|---|
+| Analyze resume | `POST /api/analyze` | Upload PDF/DOCX and optionally provide a job description |
+| Re-check resume | `POST /api/recheck` | Analyze edited resume sections |
+| Change target role | `POST /api/role-gap` | Compare resume skills against a target role |
+| Download resume | `POST /api/resume/docx` | Generate an ATS-friendly Word document |
+| Find jobs | `POST /api/jobs` | Search jobs and internships |
+| Job options | `GET /api/jobs/options` | Retrieve job search options |
+| GitHub proof check | `POST /api/github-check` | Compare resume skills with GitHub repository information |
+| Parse resume | `POST /api/resume/parse` | Extract editable resume sections |
+| Generate resume | `POST /api/resume/generate` | Generate a resume using user-provided information |
+| Project ideas | `POST /api/resume/project-ideas` | Recommend portfolio projects |
+| Learning roadmap | `POST /api/learn` | Generate a learning plan |
+
+### API request flow
+
+```text
+React Frontend
+      |
+      | Axios / HTTP
+      |
+      v
+VITE_API_BASE_URL
+      |
+      v
+FastAPI Backend (Render)
+      |
+      ├── Resume Parser
+      ├── Skill Extractor
+      ├── ML Match Scorer
+      ├── Job Role Classifier
+      ├── ATS Checker
+      ├── Learning Plan
+      └── Job Search
+      |
+      v
+JSON Response
+      |
+      v
+React Results Components
+```
+
+### Environment-specific API routing
+
+| Environment | API configuration | Request destination |
+|---|---|---|
+| Local development | `VITE_API_BASE_URL` unset | Vite proxy → `http://127.0.0.1:8000` |
+| Local development | `VITE_API_BASE_URL=http://127.0.0.1:8000` | Local FastAPI backend |
+| Vercel production | Render backend URL configured | Render backend directly |
+| Vercel production | API base URL unset | Vercel `/api/*` rewrite → Render backend |
+
+The Vercel rewrite is configured in `frontend/vercel.json`.
+
+---
+
+## Supabase authentication
+
+FitLens supports optional authentication through Supabase.
+
+Supported sign-in methods include:
+
+- Google Sign-In.
+- Email authentication.
+
+The Supabase client is initialized in:
+
+```text
+src/lib/supabase.js
+```
+
+The authentication context is managed through:
+
+```text
+src/lib/authContext.js
+```
+
+The frontend uses Supabase Auth directly.
+
+### Current Supabase project
+
+```text
+Project URL:
+https://trjqihichgkrnhtzlmlq.supabase.co
+
+Google OAuth callback:
+https://trjqihichgkrnhtzlmlq.supabase.co/auth/v1/callback
+```
+
+### Authentication configuration
+
+In Supabase:
+
+1. Open Authentication → URL Configuration.
+2. Set the production Site URL:
+
+   ```text
+   https://ai-resume-analyzer-plus.vercel.app
+   ```
+
+3. Add the production redirect URL:
+
+   ```text
+   https://ai-resume-analyzer-plus.vercel.app/**
+   ```
+
+4. Add the local redirect URL:
+
+   ```text
+   http://localhost:5173/**
+   ```
+
+5. Open Authentication → Sign In / Providers → Google.
+6. Ensure Google authentication is enabled and configured with the correct Google OAuth Client ID and Client Secret.
+7. In Google Cloud Console, configure the Supabase callback URL as an authorized redirect URI.
+
+If Supabase environment variables are not configured, the Sign In button is hidden and the remaining frontend features continue to work.
+
+---
 
 ## Demo mode
 
-Open `/?demo=high`, `/?demo=low` or `/?demo=resume` (no job description) to see the results page with sample data (same shape as a real
-`/api/analyze` response, defined in `src/lib/demo.js`) without running the backend.
+FitLens includes demo data so users can explore the results interface without running the backend.
 
-## Structure
+Available demo routes:
+
+| URL | Description |
+|---|---|
+| `/?demo=high` | High resume match example |
+| `/?demo=low` | Low resume match example |
+| `/?demo=resume` | Resume-only analysis without a job description |
+
+Demo payloads are defined in:
 
 ```text
-src/
-├── App.jsx                      routing (/, /check, /build, /jobs, /learn, /privacy, /terms); report flow
-├── main.jsx, index.css          entry point; Tailwind theme tokens (light + dark) and base styles
-├── lib/
-│   ├── api.js                   fetch wrappers, timeouts, error messages, .docx download, GitHub
-│   ├── bulletCoach.js           instant rule-based feedback on resume bullets
-│   ├── templates.js             resume templates (resumeTemplates.json), fonts, sample resume
-│   ├── jobSites.js              prefilled searches on LinkedIn, Internshala, Unstop, Naukri…
-│   ├── storage.js               browser storage helpers (draft, roadmap progress)
-│   ├── supabase.js              Supabase client (null when not configured)
-│   ├── authContext.js           useAuth() and the auth context
-│   ├── cloud.js                 saved resumes, learning progress, applications
-│   ├── tools.js                 the dashboard's tools and routes
-│   ├── demo.js                  demo payloads (?demo=high, ?demo=low, ?demo=resume)
-│   ├── sampleJobs.js            sample job postings
-│   ├── strength.js              resume strength grades (live, from the editor draft)
-│   ├── motion.js                shared animation presets
-│   └── resume.js                editor draft helpers, score colours
-├── hooks/                       useCountUp, useTheme, useApplications (tracker), useSyncedProgress
-├── utils/format.js              display labels for skills, roles and score factors
-└── components/
-    ├── layout/                  Header (tool nav, theme toggle, phone tab bar), Footer
-    ├── auth/                    AuthProvider (session, sign-in dialog), UserMenu
-    ├── pages/                   Dashboard, BuilderPage, JobsPage, LearnPage, TrackerPage, LegalPages
-    ├── resume/                  ResumeForm (editor), ResumeDocument (template renderer),
-    │                            ScaledPage (preview), TemplateGallery, PrintResume (PDF),
-    │                            ResumeLibrary (saved resumes)
-    ├── ui/                      Button, Switch, Tabs (animated), Toast
-    ├── upload/UploadView.jsx    headline, resume drop zone, optional job (+ samples), student switch
-    ├── AnalyzingView.jsx        loading state with a cold-start notice
-    ├── results/
-    │   ├── ResultsView.jsx      header, score cards, tabs, re-check / download / add-a-job logic
-    │   ├── SummaryCards.jsx     three scores: match or role readiness, ATS stamp, strength grade
-    │   ├── OverviewTab.jsx      "Job match" and "Your resume" sections
-    │   ├── overview/            Panel, JobMatch (the job, why this score), ResumeProfile
-    │   │                        (strength, target role, skills found), AddJobBar,
-    │   │                        GithubCheck (GitHub proof check)
-    │   ├── AtsTab.jsx           ATS checklist with fixes
-    │   ├── EditTab.jsx          section-by-section resume editor
-    │   ├── LearnTab.jsx         study roadmap: order, weeks at your pace, checklists, saved progress
-    │   ├── ProjectPicks.jsx     one or two projects that close several skill gaps
-    │   ├── JobsTab.jsx          live jobs and internships with a fit score on each
-    │   └── edit/fields.jsx      fields, skill tag input, list/entry editors, bullet coach
-    └── ErrorBoundary.jsx
+src/lib/demo.js
 ```
 
-## Deployment (Vercel)
+They follow the same general response structure as the real analysis API.
 
-The Vercel project's **Root Directory is `frontend`**, so `frontend/vercel.json` is the active
-config: Vite build to `dist/`, `/api/*` rewritten to the Render backend, and every other path
-served `index.html` for client-side routing.
+---
+
+## Frontend structure
+
+```text
+frontend/
+│
+├── public/
+│
+├── src/
+│   ├── App.jsx
+│   │
+│   ├── main.jsx
+│   ├── index.css
+│   │
+│   ├── lib/
+│   │   ├── api.js
+│   │   ├── bulletCoach.js
+│   │   ├── templates.js
+│   │   ├── jobSites.js
+│   │   ├── storage.js
+│   │   ├── supabase.js
+│   │   ├── authContext.js
+│   │   ├── cloud.js
+│   │   ├── tools.js
+│   │   ├── demo.js
+│   │   ├── sampleJobs.js
+│   │   ├── strength.js
+│   │   ├── motion.js
+│   │   └── resume.js
+│   │
+│   ├── hooks/
+│   │
+│   ├── utils/
+│   │   └── format.js
+│   │
+│   └── components/
+│       ├── layout/
+│       ├── auth/
+│       ├── pages/
+│       ├── resume/
+│       ├── ui/
+│       ├── upload/
+│       ├── results/
+│       │   ├── ResultsView.jsx
+│       │   ├── SummaryCards.jsx
+│       │   ├── OverviewTab.jsx
+│       │   ├── AtsTab.jsx
+│       │   ├── EditTab.jsx
+│       │   ├── LearnTab.jsx
+│       │   ├── ProjectPicks.jsx
+│       │   ├── JobsTab.jsx
+│       │   ├── overview/
+│       │   └── edit/
+│       │
+│       ├── AnalyzingView.jsx
+│       └── ErrorBoundary.jsx
+│
+├── .env.example
+├── index.html
+├── package.json
+├── vite.config.js
+├── vercel.json
+└── README.md
+```
+
+### Important modules
+
+| Module | Responsibility |
+|---|---|
+| `lib/api.js` | API requests, timeout handling, errors, DOCX downloads and GitHub integration |
+| `lib/bulletCoach.js` | Instant rule-based feedback on resume bullets |
+| `lib/templates.js` | Resume templates, fonts and sample resume |
+| `lib/storage.js` | Browser storage for drafts and roadmap progress |
+| `lib/supabase.js` | Supabase client initialization |
+| `lib/authContext.js` | Authentication state and `useAuth()` |
+| `lib/cloud.js` | Saved resumes, learning progress and applications |
+| `lib/demo.js` | Demo analysis payloads |
+| `lib/strength.js` | Resume strength grades |
+| `lib/motion.js` | Shared animation presets |
+| `hooks/` | Reusable React hooks |
+| `components/results/` | Resume analysis results and tabs |
+| `components/resume/` | Resume editor, templates and document rendering |
+
+---
+
+## Deployment — Vercel
+
+The frontend is deployed using Vercel.
+
+**Production URL:**
+
+https://ai-resume-analyzer-plus.vercel.app/
+
+### Vercel project configuration
+
+| Setting | Value |
+|---|---|
+| Framework | Vite |
+| Root Directory | `frontend` |
+| Install Command | `npm install` |
+| Build Command | `npm run build` |
+| Output Directory | `dist` |
+
+The Vercel project uses:
+
+```text
+frontend/vercel.json
+```
+
+This configuration supports:
+
+- Vite production builds.
+- `/api/*` rewrites to the Render backend.
+- SPA fallback to `index.html` for client-side routes.
+
+### Backend connection
+
+The production backend is:
+
+https://ai-resume-analyzer-api-9709.onrender.com/
+
+When using direct API requests, configure `VITE_API_BASE_URL` in Vercel and ensure the backend allows the frontend origin through its CORS configuration.
+
+If using the Vercel rewrite, keep `VITE_API_BASE_URL` unset so requests use the configured `/api/*` rewrite.
+
+---
+
+## Development notes
+
+- Keep API calls inside `src/lib/api.js` instead of duplicating request logic in components.
+- Use reusable components for consistent UI.
+- Keep demo response structures aligned with the backend API.
+- Store only non-sensitive preferences and drafts in browser storage.
+- Keep authentication and database access behind Supabase Auth and RLS.
+- Follow the reduced-motion preference for animations.
+- Run the production build before committing frontend changes.
+
+### Production build
+
+```bash
+npm run lint
+npm run build
+```
+
+The generated production bundle is stored in:
+
+```text
+dist/
+```
+
+---
+
+## Related documentation
+
+- [Main Project README](../README.md)
+- [Technical Guide](../docs/TECHNICAL.md)
+- [GitHub Repository](https://github.com/Suri-618/AI-Resume-Analyzer)
+- [Live FitLens Application](https://ai-resume-analyzer-plus.vercel.app/)
+
+---
+
+**FitLens — Understand your resume. Improve your skills. Move closer to your dream career.**
